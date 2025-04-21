@@ -83,10 +83,11 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     
     def update():
         train_logger = {
-            'lambda': None,
+            'penalty': None,
             'loss_pi': [],
             'loss_v': [],
             'loss_cv': [],
+            'loss_penalty': []
         }
 
         data = buf.get()
@@ -105,7 +106,8 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         loss_penalty.backward()
         penalty_optimizer.step()
 
-        train_logger['lambda'] = penalty_param.item()
+        train_logger['penalty'] = penalty_param.item()
+        train_logger['loss_penalty'].append(loss_penalty.item())
 
         #=====================================================================#
         #  Update policy                                                      #
@@ -214,14 +216,15 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             'EpRet': np.mean(rollout_logger['EpRet']),
             'EpCost': np.mean(rollout_logger['EpCost']),
             'EpLen': np.mean(rollout_logger['EpLen']),
-            'Lambda': train_logger['lambda'],
+            'penalty': train_logger['penalty'],
             'loss_pi': np.mean(train_logger['loss_pi']),
             'loss_v': np.mean(train_logger['loss_v']),
             'loss_cv': np.mean(train_logger['loss_cv']),
+            'loss_penalty': np.mean(train_logger['loss_penalty']),
         })
 
-        print('Epoch: {} avg return: {}, avg cost: {}, lambda: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), train_logger['lambda']))
-        print('Loss pi: {}, Loss v: {}, Loss cv: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv'])))
+        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), train_logger['penalty']))
+        print('Loss pi: {}, Loss v: {}, Loss cv: {}, Loss penalty: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv']), np.mean(train_logger['loss_penalty'])))
 
     end_time = time.time()
     print('Training time: {}h {}m {}s'.format(

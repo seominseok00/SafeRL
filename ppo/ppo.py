@@ -65,7 +65,7 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     def update():
         train_logger = {
             'loss_pi': [],
-            'loss_v': [],
+            'loss_v': []
         }
 
         data = buf.get()
