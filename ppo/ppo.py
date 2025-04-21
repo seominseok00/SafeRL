@@ -33,6 +33,10 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
     vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
 
+    #=====================================================================#
+    #  Loss function for update policy                                    #
+    #=====================================================================#
+
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
 
@@ -46,6 +50,10 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         pi_info = dict(kl=approx_kl)
 
         return loss_pi, pi_info
+    
+    #=====================================================================#
+    #  Loss function for update value function                            #
+    #=====================================================================#
     
     def compute_loss_v(data):
         obs, ret = data['obs'], data['ret']
@@ -62,6 +70,10 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         data = buf.get()
 
+        #=====================================================================#
+        #  Update policy                                                      #
+        #=====================================================================#
+
         for i in range(train_pi_iters):
             loss_pi, pi_info = compute_loss_pi(data)
             kl = pi_info['kl']
@@ -76,6 +88,10 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
             train_logger['loss_pi'].append(loss_pi.item())
 
+        #=====================================================================#
+        #  Update value function                                              #
+        #=====================================================================#
+
         for i in range(train_v_iters):
             loss_v = compute_loss_v(data)
 
@@ -87,6 +103,11 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         return train_logger
     
+
+    #=========================================================================#
+    #  Run main environment interaction loop                                  #
+    #=========================================================================#
+
     start_time = time.time()
     
     episode_per_epoch = steps_per_epoch // max_ep_len
@@ -136,7 +157,15 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                 o, _ = env.reset()
                 ep_ret, ep_len = 0, 0
 
+        #=====================================================================#
+        #  Run RL update                                                      #
+        #=====================================================================#
+
         train_logger = update()
+
+        #=====================================================================#
+        #  Log performance and stats                                          #
+        #=====================================================================#
 
         epoch_logger.append({
             'epoch': epoch,
