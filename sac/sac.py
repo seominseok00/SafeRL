@@ -238,8 +238,8 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     end_time = time.time()
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
     
-    update_logger_df = pd.DataFrame(update_logger)
-    update_logger_df.to_csv('update_logger.csv', index=False)
+    epoch_logger_df = pd.DataFrame(epoch_logger)
+    epoch_logger_df.to_csv('sac.csv', index=False)
 
 if __name__ == '__main__':
     sac(lambda: safety_gymnasium.make('SafetyPointButton1-v0'))

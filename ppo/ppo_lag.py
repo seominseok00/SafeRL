@@ -234,7 +234,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     ))
 
     epoch_logger_df = pd.DataFrame(epoch_logger)
-    epoch_logger_df.to_csv('ppo.csv', index=False)
+    epoch_logger_df.to_csv('ppo_lag.csv', index=False)
 
 if __name__ == '__main__':
     ppo_lag(lambda: safety_gymnasium.make('SafetyPointButton1-v0'))
