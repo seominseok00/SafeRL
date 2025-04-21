@@ -180,8 +180,8 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             terminal = d or timeout
             epoch_ended = t == steps_per_epoch - 1
 
-            if terminal or timeout:
-                if timeout and not (terminal):
+            if terminal or epoch_ended:
+                if epoch_ended and not (terminal):
                     print('Warning: trajectory cut off due to end of epoch')
                 
                 if timeout or epoch_ended:
