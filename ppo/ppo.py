@@ -155,7 +155,7 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                     rollout_logger['EpLen'].append(ep_len)
 
                 o, _ = env.reset()
-                ep_ret, ep_len = 0, 0
+                ep_ret, ep_cret, ep_len = 0, 0, 0
 
         #=====================================================================#
         #  Run RL update                                                      #
