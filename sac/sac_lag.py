@@ -268,14 +268,14 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             if total_steps >= update_after and total_steps % update_interval == 0:
                 if epoch >= warumup_epochs:
                     cur_cost = np.mean(rollout_logger['EpCost'])
-                    penalty_loss = compute_loss_penalty(cur_cost, penalty_param)
+                    loss_penalty = compute_loss_penalty(cur_cost, penalty_param)
 
                     penalty_optimizer.zero_grad()
-                    penalty_loss.backward()
+                    loss_penalty.backward()
                     penalty_optimizer.step()
 
                     update_logger['penalty'].append(penalty_param.item())
-                    update_logger['loss_penalty'].append(penalty_loss.item())
+                    update_logger['loss_penalty'].append(loss_penalty.item())
 
                 for j in range(update_iters):
                     batch = buf.sample_batch(batch_size)
