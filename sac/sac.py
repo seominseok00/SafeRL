@@ -241,5 +241,8 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     epoch_logger_df = pd.DataFrame(epoch_logger)
     epoch_logger_df.to_csv('sac.csv', index=False)
 
+    # Save model
+    torch.save(ac.state_dict(), '../trained_models/sac/sac.pth')
+
 if __name__ == '__main__':
     sac(lambda: safety_gymnasium.make('SafetyPointButton1-v0'))

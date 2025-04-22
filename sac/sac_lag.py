@@ -312,5 +312,8 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     epoch_logger_df = pd.DataFrame(epoch_logger)
     epoch_logger_df.to_csv('sac_lag.csv', index=False)
 
+    # Save model
+    torch.save(ac.state_dict(), '../trained_models/sac/sac_lag.pth')
+
 if __name__ == '__main__':
     sac_lag(lambda: safety_gymnasium.make('SafetyPointButton1-v0'))
