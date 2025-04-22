@@ -76,7 +76,9 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         qc2 = ac.qc2(o, a)
         qc = torch.min(qc1, qc2)
 
-        penalty = F.softplus(penalty_param)
+        # softplus was removed as experiments showed better performance without it
+        # penalty = F.softplus(penalty_param)
+        penalty = penalty_param
         penalty_item = penalty.item()
 
         cost_term = penalty_item * qc
