@@ -13,7 +13,7 @@ import safety_gymnasium
 from model import MLPActorCritic, MLPPenalty
 from buffer import Buffer
 
-def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
+def ppo_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         epochs=300, steps_per_epoch=30000, gamma=0.99, lamda=0.97, clip_ratio=0.2,
         target_kl=0.01, penalty_net=MLPPenalty, pi_lr=3e-4, vf_lr=1e-3, penalty_lr=3e-4,
         train_pi_iters=80, train_v_iters=80, train_penalty_iters=5, max_ep_len=1000):
@@ -249,7 +249,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     ))
 
     epoch_logger_df = pd.DataFrame(epoch_logger)
-    epoch_logger_df.to_csv('ppo_lag.csv', index=False)
+    epoch_logger_df.to_csv('ppo_lagnet.csv', index=False)
 
 if __name__ == '__main__':
-    ppo_lag(lambda: safety_gymnasium.make('SafetyPointButton1-v0'))
+    ppo_lagnet(lambda: safety_gymnasium.make('SafetyPointButton1-v0'))
