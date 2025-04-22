@@ -227,11 +227,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         print('Loss pi: {}, Loss v: {}, Loss cv: {}, Loss penalty: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv']), np.mean(train_logger['loss_penalty'])))
 
     end_time = time.time()
-    print('Training time: {}h {}m {}s'.format(
-        int((end_time - start_time) // 3600),
-        int((end_time - start_time) % 3600 // 60),
-        int((end_time - start_time) % 60)
-    ))
+    print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
 
     epoch_logger_df = pd.DataFrame(epoch_logger)
     epoch_logger_df.to_csv('ppo_lag.csv', index=False)
