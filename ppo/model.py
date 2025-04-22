@@ -72,3 +72,17 @@ class MLPActorCritic(nn.Module):
 
     def act(self, obs):
         return self.step(obs)[0]
+    
+class MLPPenalty(nn.Module):
+    def __init__(self, obs_dim, hid_dim=64, activation=F.elu):
+        super(MLPPenalty, self).__init__()
+        self.fc1 = nn.Linear(obs_dim, hid_dim)
+        self.fc2 = nn.Linear(hid_dim, hid_dim)
+        self.fc3 = nn.Linear(hid_dim, 1)
+        self.activation = activation
+
+    def forward(self, obs):
+        x = self.activation(self.fc1(obs))
+        x = self.activation(self.fc2(x))
+        v = self.fc3(x)
+        return torch.squeeze(v, -1)
