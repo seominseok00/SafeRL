@@ -74,7 +74,7 @@ class MLPActorCritic(nn.Module):
         return self.step(obs)[0]
     
 class MLPPenalty(nn.Module):
-    def __init__(self, obs_dim, hid_dim=64, activation=F.elu):
+    def __init__(self, obs_dim, hid_dim=64, activation=F.tanh):
         super(MLPPenalty, self).__init__()
         self.fc1 = nn.Linear(obs_dim, hid_dim)
         self.fc2 = nn.Linear(hid_dim, hid_dim)
