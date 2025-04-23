@@ -16,8 +16,8 @@ from model import MLPActorCritic
 from buffer import Buffer
 
 def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
-        epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
-        gamma=0.99, polyak=0.995, penalty_init=0.001, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5,
+        epochs=500, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
+        gamma=0.99, polyak=0.995, penalty_init=1.0, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5,
         warumup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000):
     
     epoch_logger = []
@@ -52,7 +52,7 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     #  Define Lagrangian multiplier for penalty learning                  #
     #=====================================================================#
 
-    penalty_param = torch.tensor(penalty_init, requires_grad=True)
+    penalty_param = torch.nn.Parameter(torch.tensor(penalty_init, dtype=torch.float32), requires_grad=True)
     penalty_optimizer = Adam([penalty_param], lr=penalty_lr)
 
 
@@ -273,6 +273,7 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                     penalty_optimizer.zero_grad()
                     loss_penalty.backward()
                     penalty_optimizer.step()
+                    penalty_param.data.clamp_(0.0, None)
 
                     update_logger['penalty'].append(penalty_param.item())
                     update_logger['loss_penalty'].append(loss_penalty.item())
