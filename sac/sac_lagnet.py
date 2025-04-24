@@ -290,6 +290,7 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                     batch = buf.sample_batch(batch_size)
                     train_logger = update(batch)
 
+                    update_logger['alpha'].append(ac.log_alpha.exp().item())
                     for k, v in train_logger.items():
                         update_logger[k] += v
 
@@ -302,6 +303,7 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             'EpRet': np.mean(rollout_logger['EpRet']),
             'EpCost': np.mean(rollout_logger['EpCost']),
             'EpLen': np.mean(rollout_logger['EpLen']),
+            'alpha': np.mean(update_logger['alpha']),
             'penalty': np.mean(update_logger['penalty']),
             'loss_pi': np.mean(update_logger['loss_pi']),
             'loss_q': np.mean(update_logger['loss_q']),
@@ -310,7 +312,7 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             'loss_penalty': np.mean(update_logger['loss_penalty']),
         })
 
-        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['penalty'])))
+        print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha']), np.mean(update_logger['penalty'])))
         print('Loss pi: {}, Loss q: {}, Loss qc: {}, Loss alpha: {}, Loss penalty: {}\n'.format(np.mean(update_logger['loss_pi']), np.mean(update_logger['loss_q']), np.mean(update_logger['loss_qc']), np.mean(update_logger['loss_alpha']), np.mean(update_logger['loss_penalty'])))
 
         update_logger.clear()

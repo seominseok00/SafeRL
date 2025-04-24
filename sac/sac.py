@@ -213,6 +213,7 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                     batch = buf.sample_batch(batch_size)
                     train_logger = update(batch)
 
+                    update_logger['alpha'].append(ac.log_alpha.exp().item())
                     for k, v in train_logger.items():
                         update_logger[k] += v
 
@@ -225,12 +226,13 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             'EpRet': np.mean(rollout_logger['EpRet']),
             'EpCost': np.mean(rollout_logger['EpCost']),
             'EpLen': np.mean(rollout_logger['EpLen']),
+            'alpha': np.mean(update_logger['alpha']),
             'loss_pi': np.mean(update_logger['loss_pi']),
             'loss_q': np.mean(update_logger['loss_q']),
             'loss_alpha': np.mean(update_logger['loss_alpha'])
         })
 
-        print('Epoch: {} avg return: {}, avg cost: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost'])))
+        print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha'])))
         print('Loss pi: {}, Loss q: {}, Loss alpha: {}\n'.format(np.mean(update_logger['loss_pi']), np.mean(update_logger['loss_q']), np.mean(update_logger['loss_alpha'])))
 
         update_logger.clear()
