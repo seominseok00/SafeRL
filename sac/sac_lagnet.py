@@ -15,9 +15,9 @@ import safety_gymnasium
 from model import MLPActorCritic, MLPPenalty
 from buffer import Buffer
 
-def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
+def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kwargs=dict(), seed=0,
         epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
-        gamma=0.99, polyak=0.995, penalty_net=MLPPenalty, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5,
+        gamma=0.99, polyak=0.995, penalty_net=MLPPenalty, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=True,
         warumup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000):
     
     epoch_logger = []
@@ -28,7 +28,8 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     env = env_fn()
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
-
+    
+    ac_kwargs['auto_alpha'] = auto_alpha
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
     ac_targ = deepcopy(ac)
 
@@ -44,7 +45,8 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)
     qc_optimizer = Adam(qc_params, lr=q_lr)
-    alpha_optimizer = Adam([ac.log_alpha], lr=alpha_lr)
+    if auto_alpha:
+        alpha_optimizer = Adam([ac.log_alpha], lr=alpha_lr)
 
     target_entropy = -float(act_dim)
     
@@ -52,7 +54,7 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     #  Define Lagrangian multiplier network for penalty learning          #
     #=====================================================================#
 
-    penalty_net = penalty_net(obs_dim ,act_dim, **ac_kwargs)
+    penalty_net = penalty_net(obs_dim ,act_dim, **penalty_kwargs)
     penalty_optimizer = Adam(penalty_net.parameters(), lr=penalty_lr)
 
 
@@ -86,7 +88,10 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         pi_objective = pi_objective / (1 + penalty_item)
         loss_pi = pi_objective.mean()
 
-        loss_alpha = -(ac.log_alpha.exp() * (logp_a + target_entropy).detach()).mean()
+        if auto_alpha:
+            loss_alpha = -(ac.log_alpha.exp() * (logp_a + target_entropy).detach()).mean()
+        else:
+            loss_alpha = torch.tensor(0.0)
 
         return loss_pi, loss_alpha
     
@@ -192,9 +197,10 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         loss_pi.backward()
         pi_optimizer.step()
 
-        alpha_optimizer.zero_grad()
-        loss_alpha.backward()
-        alpha_optimizer.step()
+        if auto_alpha:
+            alpha_optimizer.zero_grad()
+            loss_alpha.backward()
+            alpha_optimizer.step()
 
         train_logger['loss_pi'].append(loss_pi.item())
         train_logger['loss_alpha'].append(loss_alpha.item())

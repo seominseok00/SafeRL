@@ -67,7 +67,7 @@ class MLPQFunction(nn.Module):
 class MLPActorCritic(nn.Module):
     init_alpha = 0.2
 
-    def __init__(self, obs_space, act_space, hid_dim=64, activation=F.tanh):
+    def __init__(self, obs_space, act_space, hid_dim=64, activation=F.tanh, auto_alpha=True):
         super(MLPActorCritic, self).__init__()
 
         obs_dim = obs_space.shape[0]
@@ -82,7 +82,10 @@ class MLPActorCritic(nn.Module):
         self.qc1 = MLPQFunction(obs_dim, act_dim, hid_dim, activation)
         self.qc2 = MLPQFunction(obs_dim, act_dim, hid_dim, activation)
 
-        self.log_alpha = torch.tensor(np.log(self.init_alpha), requires_grad=True)
+        if auto_alpha:
+            self.log_alpha = torch.tensor(np.log(self.init_alpha), requires_grad=True)
+        else:
+            self.log_alpha = torch.tensor(np.log(self.init_alpha), requires_grad=False)
         
     def act(self, obs, deterministic=False):
         with torch.no_grad():
