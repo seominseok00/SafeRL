@@ -18,14 +18,14 @@ from buffer import Buffer
 def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
         gamma=0.99, polyak=0.995, penalty_init=1.0, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=False,
-        warumup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000):
+        warumup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
     
     epoch_logger = []
 
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    env = env_fn()
+    env, test_env = env_fn(), env_fn()
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
@@ -213,6 +213,35 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     def get_action(o, deterministic=False):
         return ac.act(torch.as_tensor(o, dtype=torch.float32), deterministic)
+    
+    #=====================================================================#
+    #  Run test episodes using deterministic policy                       #
+    #=====================================================================#
+
+    def test_agent():
+        test_logger = {
+            'TestEpRet': [],
+            'TestEpCost': [],
+            'TestEpLen': []
+        }
+
+        for j in range(num_test_episodes):
+            o, _ = test_env.reset()
+            d = False
+            ep_ret, ep_cret, ep_len = 0, 0, 0
+
+            while not (d or ep_len == max_ep_len):
+                o, r, c, d, truncated, info = test_env.step(get_action(o, True))
+                
+                ep_ret += r
+                ep_cret += c
+                ep_len += 1
+            
+            test_logger['TestEpRet'].append(ep_ret)
+            test_logger['TestEpCost'].append(ep_cret)
+            test_logger['TestEpLen'].append(ep_len)
+
+        return test_logger
 
     
     #=========================================================================#
@@ -292,6 +321,12 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                         update_logger[k] += v
 
         #=====================================================================#
+        #  Test current policy                                                #
+        #=====================================================================#
+
+        test_logger = test_agent()
+
+        #=====================================================================#
         #  Log performance and stats                                          #
         #=====================================================================#
         
@@ -300,6 +335,9 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             'EpRet': np.mean(rollout_logger['EpRet']),
             'EpCost': np.mean(rollout_logger['EpCost']),
             'EpLen': np.mean(rollout_logger['EpLen']),
+            'TestEpRet': np.mean(test_logger['TestEpRet']),
+            'TestEpCost': np.mean(test_logger['TestEpCost']),
+            'TestEpLen': np.mean(test_logger['TestEpLen']),
             'alpha': np.mean(update_logger['alpha']),
             'penalty': np.mean(update_logger['penalty']),
             'loss_pi': np.mean(update_logger['loss_pi']),
@@ -310,6 +348,7 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         })
 
         print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha']), np.mean(update_logger['penalty'])))
+        print('Test avg return: {}, avg cost: {}'.format(np.mean(test_logger['TestEpRet']), np.mean(test_logger['TestEpCost'])))
         print('Loss pi: {}, Loss q: {}, Loss qc: {}, Loss alpha: {}, Loss penalty: {}\n'.format(np.mean(update_logger['loss_pi']), np.mean(update_logger['loss_q']), np.mean(update_logger['loss_qc']), np.mean(update_logger['loss_alpha']), np.mean(update_logger['loss_penalty'])))
 
         update_logger.clear()
