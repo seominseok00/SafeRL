@@ -16,9 +16,9 @@ from model import MLPActorCritic
 from buffer import Buffer
 
 def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
-        epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
-        gamma=0.99, polyak=0.995, penalty_init=1.0, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=False,
-        warmup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
+            epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
+            gamma=0.99, polyak=0.995, penalty_init=1.0, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=False,
+            warmup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, penalty_update_interval=25, update_iters=50, max_ep_len=1000, num_test_episodes=10):
     
     epoch_logger = []
 
@@ -151,7 +151,7 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         return loss_penalty
 
-    def update(data):
+    def update(data, penalty_update=False):
         train_logger = {
             'alpha': [],
             'penalty': [],
@@ -207,12 +207,16 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         #=====================================================================#
         #  Update penalty                                                     #
         #=====================================================================#
-        loss_penalty = compute_loss_penalty(data, penalty_param)
+        if penalty_update:
+            loss_penalty = compute_loss_penalty(data, penalty_param)
 
-        penalty_optimizer.zero_grad()
-        loss_penalty.backward()
-        penalty_optimizer.step()
-        penalty_param.data.clamp_(0.0, None)
+            penalty_optimizer.zero_grad()
+            loss_penalty.backward()
+            penalty_optimizer.step()
+            penalty_param.data.clamp_(0.0, None)
+
+        else:
+            loss_penalty = torch.tensor(0.0)
 
         train_logger['penalty'].append(penalty_param.item())
         train_logger['loss_penalty'].append(loss_penalty.item())
@@ -324,7 +328,10 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             if total_steps >= update_after and total_steps % update_interval == 0:
                 for j in range(update_iters):
                     batch = buf.sample_batch(batch_size)
-                    train_logger = update(batch)
+                    if j % penalty_update_interval == 0:
+                        train_logger = update(batch, True)
+                    else:    
+                        train_logger = update(batch, False)
 
                     for k, v in train_logger.items():
                         update_logger[k] += v
