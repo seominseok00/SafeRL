@@ -18,7 +18,7 @@ from buffer import Buffer
 def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kwargs=dict(), seed=0,
         epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
         gamma=0.99, polyak=0.995, penalty_net=MLPPenalty, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=True,
-        warumup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
+        warmup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
     
     epoch_logger = []
 
@@ -311,7 +311,7 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
             #=====================================================================#
             
             if total_steps >= update_after and total_steps % update_interval == 0:
-                if epoch >= warumup_epochs:
+                if epoch >= warmup_epochs:
                     batch = buf.sample_batch(batch_size)
                     loss_penalty = compute_loss_penalty(batch)
 

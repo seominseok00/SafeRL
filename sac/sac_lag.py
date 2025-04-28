@@ -18,7 +18,7 @@ from buffer import Buffer
 def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
         gamma=0.99, polyak=0.995, penalty_init=1.0, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=False,
-        warumup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
+        warmup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
     
     epoch_logger = []
 
@@ -56,7 +56,6 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     penalty_param = torch.nn.Parameter(torch.tensor(penalty_init, dtype=torch.float32), requires_grad=True)
     penalty_optimizer = Adam([penalty_param], lr=penalty_lr)
-
 
     #=====================================================================#
     #  Loss function for update policy                                    #
