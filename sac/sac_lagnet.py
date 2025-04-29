@@ -16,9 +16,9 @@ from model import MLPActorCritic, MLPPenalty
 from buffer import Buffer
 
 def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kwargs=dict(), seed=0,
-        epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
-        gamma=0.99, polyak=0.995, penalty_net=MLPPenalty, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=True,
-        warmup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
+               epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
+               gamma=0.99, polyak=0.995, penalty_net=MLPPenalty, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=False,
+               warmup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
     
     epoch_logger = []
 
@@ -143,9 +143,10 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
         o, a = data['obs'], data['act']
         cost_limit = 25
 
-        qc1 = ac.qc1(o, a)
-        qc2 = ac.qc2(o, a)
-        qc = torch.min(qc1, qc2)
+        with torch.no_grad():
+            qc1 = ac.qc1(o, a)
+            qc2 = ac.qc2(o, a)
+            qc = torch.min(qc1, qc2)
 
         cost_dev = qc - cost_limit
 
@@ -158,10 +159,13 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
 
     def update(data):
         train_logger = {
+            'alpha': [],
+            'penalty': [],
             'loss_pi': [],
             'loss_q': [],
             'loss_qc': [],
             'loss_alpha': [],
+            'loss_penalty': []
         }
 
         #=====================================================================#
@@ -202,8 +206,21 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
             loss_alpha.backward()
             alpha_optimizer.step()
 
+        train_logger['alpha'].append(ac.log_alpha.exp().item())
         train_logger['loss_pi'].append(loss_pi.item())
         train_logger['loss_alpha'].append(loss_alpha.item())
+
+        #=====================================================================#
+        #  Update penalty                                                     #
+        #=====================================================================#
+        loss_penalty = compute_loss_penalty(data)
+
+        penalty_optimizer.zero_grad()
+        loss_penalty.backward()
+        penalty_optimizer.step()
+
+        train_logger['penalty'].append(penalty_net(data['obs'], data['act']).mean().item())
+        train_logger['loss_penalty'].append(loss_penalty.item())
 
         # Unfreeze Q-networks
         for p in q_params:
@@ -311,22 +328,10 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
             #=====================================================================#
             
             if total_steps >= update_after and total_steps % update_interval == 0:
-                if epoch >= warmup_epochs:
-                    batch = buf.sample_batch(batch_size)
-                    loss_penalty = compute_loss_penalty(batch)
-
-                    penalty_optimizer.zero_grad()
-                    loss_penalty.backward()
-                    penalty_optimizer.step()
-
-                    update_logger['penalty'].append(penalty_net(batch['obs'], batch['act']).mean().item())
-                    update_logger['loss_penalty'].append(loss_penalty.item())
-
                 for j in range(update_iters):
                     batch = buf.sample_batch(batch_size)
                     train_logger = update(batch)
 
-                    update_logger['alpha'].append(ac.log_alpha.exp().item())
                     for k, v in train_logger.items():
                         update_logger[k] += v
 
