@@ -16,9 +16,9 @@ from model import MLPActorCritic
 from buffer import Buffer
 
 def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
-            epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
-            gamma=0.99, polyak=0.995, penalty_init=1.0, pi_lr=3e-4, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=False,
-            warmup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, penalty_update_interval=25, update_iters=50, max_ep_len=1000, num_test_episodes=10):
+            epochs=1000, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
+            gamma=0.99, polyak=0.995, penalty_init=0.0, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-4, auto_alpha=True,
+            warmup_epochs=100, start_steps=10000, update_after=1000, update_interval=50, penalty_update_interval=25, update_iters=50, max_ep_len=1000, num_test_episodes=10):
     
     epoch_logger = []
 
@@ -77,8 +77,8 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         qc2 = ac.qc2(o, a)
         qc = torch.min(qc1, qc2)
 
-        penalty = F.softplus(penalty_param)
-        # penalty = penalty_param
+        # penalty = F.softplus(penalty_param)
+        penalty = penalty_param
         penalty_item = penalty.item()
 
         cost_term = penalty_item * qc
@@ -138,18 +138,19 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         return loss_q, loss_qc
     
+    #=====================================================================#
+    #  Loss function for update penalty                                   #
+    #=====================================================================#
+
     def compute_loss_penalty(data, penalty_param):
         cost_limit = 25
-        o, a = data['obs'], data['act']
-
-        qc1 = ac.qc1(o, a)
-        qc2 = ac.qc2(o, a)
-        qc = torch.min(qc1, qc2)
+        cur_cost = data['cur_cost']
         
-        loss_penalty = -penalty_param * (qc - cost_limit).detach()
+        loss_penalty = -penalty_param * (cur_cost - cost_limit)
         loss_penalty = loss_penalty.mean()
 
         return loss_penalty
+
 
     def update(data, penalty_update=False):
         train_logger = {
@@ -328,7 +329,8 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             if total_steps >= update_after and total_steps % update_interval == 0:
                 for j in range(update_iters):
                     batch = buf.sample_batch(batch_size)
-                    if j % penalty_update_interval == 0:
+                    batch['cur_cost'] = np.mean(rollout_logger['EpCost'])
+                    if epoch > warmup_epochs and j % penalty_update_interval == 0:
                         train_logger = update(batch, True)
                     else:    
                         train_logger = update(batch, False)
