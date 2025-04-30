@@ -14,7 +14,7 @@ from model import MLPActorCritic
 from buffer import Buffer
 
 def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
-        epochs=300, steps_per_epoch=30000, gamma=0.99, lamda=0.97, clip_ratio=0.2,
+        epochs=1000, steps_per_epoch=30000, gamma=0.99, lamda=0.97, clip_ratio=0.2,
         target_kl=0.01, penalty_init=1.0, pi_lr=3e-4, vf_lr=1e-3, penalty_lr=5e-2,
         train_pi_iters=80, train_v_iters=80, max_ep_len=1000):
     
@@ -57,7 +57,8 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         surro_cost = (ratio * cadv).mean()
 
-        penalty = F.softplus(penalty_param)
+        # penalty = F.softplus(penalty_param)
+        penalty = penalty_param
         penalty_item = penalty.item()
 
         pi_objective = surr_adv - penalty_item * surro_cost
@@ -105,6 +106,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         penalty_optimizer.zero_grad()
         loss_penalty.backward()
         penalty_optimizer.step()
+        penalty_param.data.clamp_(0.0, None)
 
         train_logger['penalty'] = penalty_param.item()
         train_logger['loss_penalty'].append(loss_penalty.item())
