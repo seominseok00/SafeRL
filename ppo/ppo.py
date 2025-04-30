@@ -189,4 +189,4 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     torch.save(ac.state_dict(), '../trained_models/ppo/ppo.pth')
 
 if __name__ == '__main__':
-    ppo(lambda: safety_gymnasium.make('SafetyPointButton1-v0'))
+    ppo(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))

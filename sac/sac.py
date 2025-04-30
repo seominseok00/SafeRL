@@ -16,7 +16,7 @@ from buffer import Buffer
 
 def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
-        gamma=0.99, polyak=0.995, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, auto_alpha=False,
+        gamma=0.99, polyak=0.995, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, auto_alpha=True,
         start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
     
     epoch_logger = []
@@ -292,4 +292,4 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     torch.save(ac.state_dict(), '../trained_models/sac/sac.pth')
 
 if __name__ == '__main__':
-    sac(lambda: safety_gymnasium.make('SafetyPointButton1-v0'))
+    sac(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))
