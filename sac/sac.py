@@ -1,3 +1,4 @@
+import os
 import time
 import itertools
 from copy import deepcopy
@@ -276,6 +277,15 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             'loss_alpha': np.mean(update_logger['loss_alpha'])
         })
 
+        # Save log
+        epoch_logger_df = pd.DataFrame(epoch_logger)
+        os.makedirs('../logs/sac', exist_ok=True)
+        epoch_logger_df.to_csv('../logs/sac/sac.csv', index=False)
+
+        # Save model
+        os.makedirs('../trained_models/sac', exist_ok=True)
+        torch.save(ac.state_dict(), '../trained_models/sac/sac.pth')
+
         print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha'])))
         print('Test avg return: {}, avg cost: {}'.format(np.mean(test_logger['TestEpRet']), np.mean(test_logger['TestEpCost'])))
         print('Loss pi: {}, Loss q: {}, Loss alpha: {}\n'.format(np.mean(update_logger['loss_pi']), np.mean(update_logger['loss_q']), np.mean(update_logger['loss_alpha'])))
@@ -285,11 +295,6 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     end_time = time.time()
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
     
-    epoch_logger_df = pd.DataFrame(epoch_logger)
-    epoch_logger_df.to_csv('sac.csv', index=False)
-
-    # Save model
-    torch.save(ac.state_dict(), '../trained_models/sac/sac.pth')
 
 if __name__ == '__main__':
     sac(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))

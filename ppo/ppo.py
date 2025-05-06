@@ -1,3 +1,4 @@
+import os
 import time
 from collections import deque
 
@@ -175,18 +176,21 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             'loss_pi': np.mean(train_logger['loss_pi']),
             'loss_v': np.mean(train_logger['loss_v']),
         })
+        
+        # Save log
+        epoch_logger_df = pd.DataFrame(epoch_logger)
+        os.makedirs('../logs/ppo', exist_ok=True)
+        epoch_logger_df.to_csv('../logs/ppo/ppo.csv', index=False)
+
+        # Save model
+        os.makedirs('../trained_models/ppo', exist_ok=True)
+        torch.save(ac.state_dict(), '../trained_models/ppo/ppo.pth')
 
         print('Epoch: {} avg return: {}, avg cost: {}, avg len: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(rollout_logger['EpLen'])))
         print('Loss pi: {}, Loss v: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v'])))
 
     end_time = time.time()
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
-
-    epoch_logger_df = pd.DataFrame(epoch_logger)
-    epoch_logger_df.to_csv('ppo.csv', index=False)
-
-    # Save model
-    torch.save(ac.state_dict(), '../trained_models/ppo/ppo.pth')
 
 if __name__ == '__main__':
     ppo(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))

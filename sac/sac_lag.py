@@ -1,3 +1,4 @@
+import os
 import time
 import itertools
 from copy import deepcopy
@@ -365,6 +366,15 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             'loss_penalty': np.mean(update_logger['loss_penalty']),
         })
 
+        # Save log
+        epoch_logger_df = pd.DataFrame(epoch_logger)
+        os.makedirs('../logs/sac', exist_ok=True)
+        epoch_logger_df.to_csv('../logs/sac/sac_lag.csv', index=False)
+
+        # Save model
+        os.makedirs('../trained_models/sac', exist_ok=True)
+        torch.save(ac.state_dict(), '../trained_models/sac/sac_lag.pth')
+
         print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha']), np.mean(update_logger['penalty'])))
         print('Test avg return: {}, avg cost: {}'.format(np.mean(test_logger['TestEpRet']), np.mean(test_logger['TestEpCost'])))
         print('Loss pi: {}, Loss q: {}, Loss qc: {}, Loss alpha: {}, Loss penalty: {}\n'.format(np.mean(update_logger['loss_pi']), np.mean(update_logger['loss_q']), np.mean(update_logger['loss_qc']), np.mean(update_logger['loss_alpha']), np.mean(update_logger['loss_penalty'])))
@@ -373,12 +383,6 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         
     end_time = time.time()
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
-    
-    epoch_logger_df = pd.DataFrame(epoch_logger)
-    epoch_logger_df.to_csv('sac_lag.csv', index=False)
-
-    # Save model
-    torch.save(ac.state_dict(), '../trained_models/sac/sac_lag.pth')
 
 if __name__ == '__main__':
     sac_lag(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))
