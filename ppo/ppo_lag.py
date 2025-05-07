@@ -9,10 +9,16 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 
-import safety_gymnasium
-
 from model import MLPActorCritic
 from buffer import Buffer
+
+USE_GYMNASIUM = True
+
+if USE_GYMNASIUM:
+    import safety_gymnasium
+else:
+    import gym
+    import safety_gym
 
 def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         epochs=1000, steps_per_epoch=30000, gamma=0.99, lamda=0.97, clip_ratio=0.2,
@@ -164,14 +170,22 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         'EpLen': deque(maxlen=episode_per_epoch),
     }
     
-    o, _ = env.reset()
+    if USE_GYMNASIUM:
+        o, _ = env.reset()
+    else:
+        o = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
     for epoch in range(epochs):
         for t in range(steps_per_epoch):
             a, v, vc, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
 
-            next_o, r, c, d, truncated, info = env.step(a)
+            if USE_GYMNASIUM:
+                next_o, r, c, d, truncated, info = env.step(a)
+            else:
+                next_o, r, d, info = env.step(a)
+                c = info['cost']
+                
             
             ep_ret += r
             ep_cret += c
@@ -201,7 +215,10 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                     rollout_logger['EpCost'].append(ep_cret)
                     rollout_logger['EpLen'].append(ep_len)
 
-                o, _ = env.reset()
+                if USE_GYMNASIUM:
+                    o, _ = env.reset()
+                else:
+                    o = env.reset()
                 ep_ret, ep_cret, ep_len = 0, 0, 0
 
         #=====================================================================#
@@ -242,4 +259,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
 
 if __name__ == '__main__':
-    ppo_lag(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))
+    if USE_GYMNASIUM:
+        ppo_lag(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))
+    else:
+        ppo_lag(lambda: gym.make('Safexp-PointGoal1-v0'))

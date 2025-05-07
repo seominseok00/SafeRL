@@ -10,10 +10,16 @@ import pandas as pd
 import torch
 from torch.optim import Adam
 
-import safety_gymnasium
-
 from model import MLPActorCritic
 from buffer import Buffer
+
+USE_GYMNASIUM = True
+
+if USE_GYMNASIUM:
+    import safety_gymnasium
+else:
+    import gym
+    import safety_gym
 
 def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
@@ -171,12 +177,19 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         }
 
         for j in range(num_test_episodes):
-            o, _ = test_env.reset()
+            if USE_GYMNASIUM:
+                o, _ = test_env.reset()
+            else:
+                o = test_env.reset()
             d = False
             ep_ret, ep_cret, ep_len = 0, 0, 0
 
             while not (d or ep_len == max_ep_len):
-                o, r, c, d, truncated, info = test_env.step(get_action(o, True))
+                if USE_GYMNASIUM:
+                    o, r, c, d, truncated, info = test_env.step(get_action(o, True))
+                else:
+                    o, r, d, info = test_env.step(get_action(o, True))
+                    c = info['cost']
                 
                 ep_ret += r
                 ep_cret += c
@@ -206,7 +219,10 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     update_logger = defaultdict(list)
 
-    o, _ = env.reset()
+    if USE_GYMNASIUM:
+        o, _ = env.reset()
+    else:
+        o = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
     for epoch in range(epochs):
@@ -218,7 +234,11 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
             else:
                 a = env.action_space.sample()
 
-            next_o, r, c, d, truncated, info = env.step(a)
+            if USE_GYMNASIUM:
+                next_o, r, c, d, truncated, info = env.step(a)
+            else:
+                next_o, r, d, info = env.step(a)
+                c = info['cost']
 
             ep_ret += r
             ep_cret += c
@@ -237,7 +257,10 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                 rollout_logger['EpCost'].append(ep_cret)
                 rollout_logger['EpLen'].append(ep_len)
 
-                o, _ = env.reset()
+                if USE_GYMNASIUM:
+                    o, _ = env.reset()
+                else:
+                    o = env.reset()
                 ep_ret, ep_cret, ep_len = 0, 0, 0
 
             #=====================================================================#
@@ -297,4 +320,7 @@ def sac(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     
 
 if __name__ == '__main__':
-    sac(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))
+    if USE_GYMNASIUM:
+        sac(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))
+    else:
+        sac(lambda: gym.make('Safexp-PointGoal1-v0'))
