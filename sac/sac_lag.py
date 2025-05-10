@@ -294,11 +294,14 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     total_steps = 0
 
     episode_per_epoch = steps_per_epoch // max_ep_len
+
     rollout_logger = {
         'EpRet': deque(maxlen=episode_per_epoch),
         'EpCost': deque(maxlen=episode_per_epoch),
         'EpLen': deque(maxlen=episode_per_epoch),
     }
+
+    best_return, lowest_cost = -np.inf, np.inf
 
     update_logger = defaultdict(list)
 
@@ -398,8 +401,17 @@ def sac_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         os.makedirs('../trained_models/sac', exist_ok=True)
         torch.save(ac.state_dict(), '../trained_models/sac/sac_lag.pth')
 
+        # Save best model
+        current_return = np.mean(test_logger['TestEpRet'])
+        current_cost = np.mean(test_logger['TestEpCost'])
+
+        if current_return >= best_return and current_cost <= lowest_cost:
+            best_return = current_return
+            lowest_cost = current_cost
+            torch.save(ac.state_dict(), '../trained_models/sac/best_sac_lag.pth')
+
         print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha']), np.mean(update_logger['penalty'])))
-        print('Test avg return: {}, avg cost: {}'.format(np.mean(test_logger['TestEpRet']), np.mean(test_logger['TestEpCost'])))
+        print('Test avg return: {}, avg cost: {}'.format(current_return, current_cost))
         print('Loss pi: {}, Loss q: {}, Loss qc: {}, Loss alpha: {}, Loss penalty: {}\n'.format(np.mean(update_logger['loss_pi']), np.mean(update_logger['loss_q']), np.mean(update_logger['loss_qc']), np.mean(update_logger['loss_alpha']), np.mean(update_logger['loss_penalty'])))
 
         update_logger.clear()

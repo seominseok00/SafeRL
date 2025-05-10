@@ -183,6 +183,8 @@ def ppo_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         'EpLen': deque(maxlen=episode_per_epoch),
     }
     
+    best_return, lowest_cost = -np.inf, np.inf
+
     if USE_GYMNASIUM:
         o, _ = env.reset()
     else:
@@ -264,7 +266,16 @@ def ppo_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         os.makedirs('../trained_models/ppo', exist_ok=True)
         torch.save(ac.state_dict(), '../trained_models/ppo/ppo_lagnet.pth')
 
-        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(train_logger['penalty'])))
+        # Save best model
+        current_return = np.mean(rollout_logger['EpRet'])
+        current_cost = np.mean(rollout_logger['EpCost'])
+
+        if current_return >= best_return and current_cost <= lowest_cost:
+            best_return = current_return
+            lowest_cost = current_cost
+            torch.save(ac.state_dict(), '../trained_models/ppo/best_ppo_lagnet.pth')
+
+        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, current_return, current_cost, np.mean(train_logger['penalty'])))
         print('Loss pi: {}, Loss v: {}, Loss cv: {}, Loss penalty: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv']), np.mean(train_logger['loss_penalty'])))
 
     end_time = time.time()

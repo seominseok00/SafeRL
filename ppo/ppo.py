@@ -123,6 +123,8 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         'EpCost': deque(maxlen=episode_per_epoch),
         'EpLen': deque(maxlen=episode_per_epoch),
     }
+
+    best_return, lowest_cost = -np.inf, np.inf
     
     if USE_GYMNASIUM:
         o, _ = env.reset()
@@ -202,7 +204,16 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         os.makedirs('../trained_models/ppo', exist_ok=True)
         torch.save(ac.state_dict(), '../trained_models/ppo/ppo.pth')
 
-        print('Epoch: {} avg return: {}, avg cost: {}, avg len: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(rollout_logger['EpLen'])))
+        # Save best model
+        current_return = np.mean(rollout_logger['EpRet'])
+        current_cost = np.mean(rollout_logger['EpCost'])
+
+        if current_return >= best_return and current_cost <= lowest_cost:
+            best_return = current_return
+            lowest_cost = current_cost
+            torch.save(ac.state_dict(), '../trained_models/ppo/best_ppo.pth')
+
+        print('Epoch: {} avg return: {}, avg cost: {}'.format(epoch, current_return, current_cost))
         print('Loss pi: {}, Loss v: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v'])))
 
     end_time = time.time()
