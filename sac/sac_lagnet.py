@@ -15,6 +15,7 @@ from model import MLPActorCritic, MLPPenalty
 from buffer import Buffer
 
 USE_GYMNASIUM = True
+USE_COST_INDICATOR = False
 
 if USE_GYMNASIUM:
     import safety_gymnasium
@@ -33,6 +34,14 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
     torch.manual_seed(seed)
 
     env, test_env = env_fn(), env_fn()
+
+    if USE_GYMNASIUM:
+        env.task.cost_conf.constrain_indicator = USE_COST_INDICATOR
+        test_env.task.cost_conf.constrain_indicator = USE_COST_INDICATOR
+    else:
+        env.constrain_indicator = USE_COST_INDICATOR
+        test_env.constrain_indicator = USE_COST_INDICATOR
+
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     

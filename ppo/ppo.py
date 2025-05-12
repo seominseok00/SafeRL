@@ -12,6 +12,7 @@ from model import MLPActorCritic
 from buffer import Buffer
 
 USE_GYMNASIUM = True
+USE_COST_INDICATOR = False
 
 if USE_GYMNASIUM:
     import safety_gymnasium
@@ -30,6 +31,12 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     torch.manual_seed(seed)
 
     env = env_fn()
+
+    if USE_GYMNASIUM:
+        env.task.cost_conf.constrain_indicator = USE_COST_INDICATOR
+    else:
+        env.constrain_indicator = USE_COST_INDICATOR
+        
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
@@ -118,6 +125,7 @@ def ppo(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     start_time = time.time()
     
     episode_per_epoch = steps_per_epoch // max_ep_len
+    
     rollout_logger = {
         'EpRet': deque(maxlen=episode_per_epoch),
         'EpCost': deque(maxlen=episode_per_epoch),
