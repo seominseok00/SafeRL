@@ -147,7 +147,7 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
             loss_penalty.backward()
             penalty_optimizer.step()
 
-            train_logger['penalty'] = penalty_net(data['obs']).mean().item()
+            train_logger['penalty'].append(penalty_net(data['obs']).mean().item())
             train_logger['loss_penalty'].append(loss_penalty.item())
 
         #=====================================================================#

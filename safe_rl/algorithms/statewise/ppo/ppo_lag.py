@@ -112,6 +112,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
     def update():
         train_logger = {
             'penalty': None,
+            'cost_dev': None,
             'loss_pi': [],
             'loss_v': [],
             'loss_cv': [],
@@ -136,6 +137,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
         penalty_param.data.clamp_(0.0, None)
 
         train_logger['penalty'] = penalty_param.item()
+        train_logger['cost_dev'] = cost_dev.item()
         train_logger['loss_penalty'].append(loss_penalty.item())
 
         #=====================================================================#
@@ -281,7 +283,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
             lowest_cost = current_cost
             torch.save(ac.state_dict(), os.path.join(run_dir, 'best_ppo_lag.pth'))
 
-        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, current_return, current_cost, train_logger['penalty']))
+        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}, cost_dev: {}'.format(epoch, current_return, current_cost, train_logger['penalty'], train_logger['cost_dev']))
         print('Loss pi: {}, Loss v: {}, Loss cv: {}, Loss penalty: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv']), np.mean(train_logger['loss_penalty'])))
 
     end_time = time.time()

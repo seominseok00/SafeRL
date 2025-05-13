@@ -121,11 +121,12 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
         loss_penalty = -penalty * cost_dev
         loss_penalty = loss_penalty.mean()
 
-        return loss_penalty
+        return loss_penalty, cost_dev
     
     def update():
         train_logger = {
             'penalty': [],
+            'cost_dev': [],
             'loss_pi': [],
             'loss_v': [],
             'loss_cv': [],
@@ -139,13 +140,14 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
         #=====================================================================#
 
         for i in range(train_penalty_iters):
-            loss_penalty = compute_loss_penalty(data)
+            loss_penalty, cost_dev = compute_loss_penalty(data)
 
             penalty_optimizer.zero_grad()
             loss_penalty.backward()
             penalty_optimizer.step()
 
-            train_logger['penalty'] = penalty_net(data['obs']).mean().item()
+            train_logger['penalty'].append(penalty_net(data['obs']).mean().item())
+            train_logger['cost_dev'].append(cost_dev.mean().item())
             train_logger['loss_penalty'].append(loss_penalty.item())
 
         #=====================================================================#
@@ -293,7 +295,7 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
             torch.save(ac.state_dict(), os.path.join(run_dir, 'best_ppo_lagnet.pth'))
             torch.save(penalty_net.state_dict(), os.path.join(run_dir, 'best_penalty_net.pth'))
 
-        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, current_return, current_cost, np.mean(train_logger['penalty'])))
+        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}, cost_dev: {}'.format(epoch, current_return, current_cost, np.mean(train_logger['penalty']), np.mean(train_logger['cost_dev'])))
         print('Loss pi: {}, Loss v: {}, Loss cv: {}, Loss penalty: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv']), np.mean(train_logger['loss_penalty'])))
 
     end_time = time.time()
