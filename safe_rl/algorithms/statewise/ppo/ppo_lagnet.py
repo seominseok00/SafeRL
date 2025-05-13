@@ -281,6 +281,7 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
 
         # Save model
         torch.save(ac.state_dict(), os.path.join(run_dir, 'ppo_lagnet.pth'))
+        torch.save(penalty_net.state_dict(), os.path.join(run_dir, 'penalty_net.pth'))
 
         # Save best model
         current_return = np.mean(rollout_logger['EpRet'])
@@ -290,6 +291,7 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
             best_return = current_return
             lowest_cost = current_cost
             torch.save(ac.state_dict(), os.path.join(run_dir, 'best_ppo_lagnet.pth'))
+            torch.save(penalty_net.state_dict(), os.path.join(run_dir, 'best_penalty_net.pth'))
 
         print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, current_return, current_cost, np.mean(train_logger['penalty'])))
         print('Loss pi: {}, Loss v: {}, Loss cv: {}, Loss penalty: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv']), np.mean(train_logger['loss_penalty'])))
