@@ -1,6 +1,8 @@
 import os
 import time
+import yaml
 from collections import deque
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -9,34 +11,32 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 
-from model import MLPActorCritic
-from buffer import Buffer
+from safe_rl.algorithms.expected.ppo.model import MLPActorCritic
+from safe_rl.algorithms.expected.ppo.buffer import Buffer
 
-USE_GYMNASIUM = True
-USE_COST_INDICATOR = False
+from safe_rl.utils.config import load_config
 
-if USE_GYMNASIUM:
-    import safety_gymnasium
-else:
-    import gym
-    import safety_gym
-
-def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
-        epochs=1000, steps_per_epoch=30000, gamma=0.99, lamda=0.97, clip_ratio=0.2,
-        target_kl=0.01, penalty_init=1.0, pi_lr=3e-4, vf_lr=1e-3, penalty_lr=5e-2,
-        train_pi_iters=80, train_v_iters=80, max_ep_len=1000):
+def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium=True, use_cost_indicator=True, 
+            env_id='SafetyPointGoal1-v0', seed=0, epochs=1000, steps_per_epoch=30000, gamma=0.99, lamda=0.97, 
+            clip_ratio=0.2, target_kl=0.01, penalty_init=1.0, pi_lr=3e-4, vf_lr=1e-3, penalty_lr=5e-2, cost_limit=25,
+            train_pi_iters=80, train_v_iters=80, max_ep_len=1000):
     
     epoch_logger = []
 
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    env = env_fn()
+    if use_gymnasium:
+        import safety_gymnasium
 
-    if USE_GYMNASIUM:
-        env.task.cost_conf.constrain_indicator = USE_COST_INDICATOR
+        env = safety_gymnasium.make(env_id)
+        env.task.cost_conf.constrain_indicator = use_cost_indicator
     else:
-        env.constrain_indicator = USE_COST_INDICATOR
+        import gym
+        import safety_gym
+
+        env = gym.make(env_id)
+        env.constrain_indicator = use_cost_indicator
 
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
@@ -48,6 +48,18 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
     vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
     cvf_optimizer = Adam(ac.vc.parameters(), lr=vf_lr)
+
+    # Create directory for saving logs and models
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.normpath(os.path.join(current_dir, '../../../'))
+    run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-') + f'expected-ppo-lag-{env_id}'
+    run_dir = os.path.join(root_dir, 'runs', run_id)
+    os.makedirs(run_dir, exist_ok=True)
+
+    # Save configuration
+    config_save_path = os.path.join(run_dir, 'config.yaml')
+    with open(config_save_path, 'w') as f:
+        yaml.dump(config, f, sort_keys=False)
 
     #=====================================================================#
     #  Define Lagrangian multiplier for penalty learning                  #
@@ -112,7 +124,6 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         #=====================================================================#
 
         cur_cost = np.mean(rollout_logger['EpCost'])
-        cost_limit = 25
         cost_dev = cur_cost - cost_limit
 
         loss_penalty = -penalty_param * cost_dev
@@ -180,7 +191,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
     best_return, lowest_cost = -np.inf, np.inf
     
-    if USE_GYMNASIUM:
+    if use_gymnasium:
         o, _ = env.reset()
     else:
         o = env.reset()
@@ -190,7 +201,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         for t in range(steps_per_epoch):
             a, v, vc, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
 
-            if USE_GYMNASIUM:
+            if use_gymnasium:
                 next_o, r, c, d, truncated, info = env.step(a)
             else:
                 next_o, r, d, info = env.step(a)
@@ -224,7 +235,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
                     rollout_logger['EpCost'].append(ep_cret)
                     rollout_logger['EpLen'].append(ep_len)
 
-                if USE_GYMNASIUM:
+                if use_gymnasium:
                     o, _ = env.reset()
                 else:
                     o = env.reset()
@@ -254,12 +265,10 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         # Save log
         epoch_logger_df = pd.DataFrame(epoch_logger)
-        os.makedirs('../logs/ppo', exist_ok=True)
-        epoch_logger_df.to_csv('../logs/ppo/ppo_lag.csv', index=False)
+        epoch_logger_df.to_csv(os.path.join(run_dir, 'ppo_lag.csv'), index=False)
 
         # Save model
-        os.makedirs('../trained_models/ppo', exist_ok=True)
-        torch.save(ac.state_dict(), '../trained_models/ppo/ppo_lag.pth')
+        torch.save(ac.state_dict(), os.path.join(run_dir, 'ppo_lag.pth'))
 
         # Save best model
         current_return = np.mean(rollout_logger['EpRet'])
@@ -268,7 +277,7 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
         if current_return >= best_return and current_cost <= lowest_cost:
             best_return = current_return
             lowest_cost = current_cost
-            torch.save(ac.state_dict(), '../trained_models/ppo/best_ppo_lag.pth')
+            torch.save(ac.state_dict(), os.path.join(run_dir, 'best_ppo_lag.pth'))
 
         print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, current_return, current_cost, train_logger['penalty']))
         print('Loss pi: {}, Loss v: {}, Loss cv: {}, Loss penalty: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv']), np.mean(train_logger['loss_penalty'])))
@@ -277,7 +286,6 @@ def ppo_lag(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0,
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
 
 if __name__ == '__main__':
-    if USE_GYMNASIUM:
-        ppo_lag(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))
-    else:
-        ppo_lag(lambda: gym.make('Safexp-PointGoal1-v0'))
+    config = load_config('configs/expected/ppo/ppo_lag.yaml')
+
+    ppo_lag(config=config, **config)

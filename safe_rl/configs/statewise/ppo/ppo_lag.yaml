@@ -1,0 +1,25 @@
+use_gymnasium: True
+use_cost_indicator: True
+
+env_id: SafetyPointGoal1-v0  # gymnasium
+# env_id: Safexp-PointGoal1-v0  # gym
+
+seed: 0
+epochs: 1000
+steps_per_epoch: 30000
+max_ep_len: 1000
+
+gamma: 0.99
+lamda: 0.97
+clip_ratio: 0.2
+target_kl: 0.01
+
+penalty_init: 1.0
+cost_limit: 25
+
+pi_lr: 0.0003
+vf_lr: 0.001
+penalty_lr: 0.05
+
+train_pi_iters: 80
+train_v_iters: 80
