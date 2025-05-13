@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 import yaml
@@ -300,6 +301,10 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
 
 if __name__ == '__main__':
-    config = load_config('configs/expected/ppo/ppo_lagnet.yaml')
+    parser = argparse.ArgumentParser(description='Expected PPO Lagrangian Network')
+    parser.add_argument('--config', type=str, default='configs/expected/ppo/ppo_lagnet.yaml', help='Path to the YAML configuration file (relative to project root)')
+    args = parser.parse_args()
+
+    config = load_config(args.config)
 
     ppo_lagnet(config=config, **config)
