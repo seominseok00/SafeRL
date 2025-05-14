@@ -14,6 +14,7 @@ lamda: 0.97
 clip_ratio: 0.2
 target_kl: 0.01
 
+penalty_init: 20.0
 cost_limit: 0.0009
 
 pi_lr: 0.0003

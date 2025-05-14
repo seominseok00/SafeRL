@@ -19,8 +19,8 @@ from safe_rl.utils.config import load_config
 
 def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium=True, use_cost_indicator=True,
                env_id='SafetyPointGoal1-v0', seed=0, epochs=300, steps_per_epoch=30000, gamma=0.99, lamda=0.97,
-               clip_ratio=0.2, target_kl=0.01, penalty_net=MLPPenalty, pi_lr=3e-4, vf_lr=1e-3, penalty_lr=3e-4, cost_limit=25,
-               train_pi_iters=80, train_v_iters=80, train_penalty_iters=5, max_ep_len=1000):
+               clip_ratio=0.2, target_kl=0.01, penalty_net=MLPPenalty, penalty_init=1.0, pi_lr=3e-4, vf_lr=1e-3, penalty_lr=3e-4,
+               cost_limit=25, train_pi_iters=80, train_v_iters=80, train_penalty_iters=5, max_ep_len=1000):
     
     epoch_logger = []
 
@@ -66,7 +66,7 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
     #  Define Lagrangian multiplier network for penalty learning          #
     #=====================================================================#
 
-    penalty_net = penalty_net(obs_dim, **ac_kwargs)
+    penalty_net = penalty_net(obs_dim, **ac_kwargs, penalty_init=penalty_init)
     penalty_optimizer = Adam(penalty_net.parameters(), lr=penalty_lr)
 
     #=====================================================================#
