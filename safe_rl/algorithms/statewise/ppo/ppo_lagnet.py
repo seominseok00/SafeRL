@@ -84,8 +84,7 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
 
         surro_cost = (ratio * cadv).mean()
 
-        penalty_param = penalty_net(obs)
-        penalty = F.softplus(penalty_param)
+        penalty = penalty_net(obs)
         penalty_item = penalty.mean().item()
 
         pi_objective = surr_adv - penalty_item * surro_cost

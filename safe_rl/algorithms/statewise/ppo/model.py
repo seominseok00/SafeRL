@@ -81,8 +81,11 @@ class MLPPenalty(nn.Module):
         self.fc3 = nn.Linear(hid_dim, 1)
         self.activation = activation
 
+        nn.init.constant_(self.fc3.bias, 20.0)
+
     def forward(self, obs):
         x = self.activation(self.fc1(obs))
         x = self.activation(self.fc2(x))
-        v = self.fc3(x)
+        x = self.fc3(x)
+        v = F.softplus(x)
         return torch.squeeze(v, -1)
