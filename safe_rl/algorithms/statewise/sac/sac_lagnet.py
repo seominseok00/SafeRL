@@ -11,8 +11,8 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 
-from model import MLPActorCritic, MLPPenalty
-from buffer import Buffer
+from safe_rl.algorithms.vanilla.sac.model import MLPActorCritic, MLPPenalty
+from safe_rl.algorithms.vanilla.sac.buffer import Buffer
 
 USE_GYMNASIUM = True
 USE_COST_INDICATOR = False

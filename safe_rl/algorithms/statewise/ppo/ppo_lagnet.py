@@ -53,7 +53,7 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnas
     # Create directory for saving logs and models
     current_dir = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.normpath(os.path.join(current_dir, '../../../'))
-    run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-') + f'statewise-ppo-lagnet-{env_id}'
+    run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-') + f'ppo-lagnet-{env_id}'
     run_dir = os.path.join(root_dir, 'runs', run_id)
     os.makedirs(run_dir, exist_ok=True)
 

@@ -12,13 +12,13 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 
-from safe_rl.algorithms.statewise.ppo.model import MLPActorCritic
-from safe_rl.algorithms.statewise.ppo.buffer import Buffer
+from safe_rl.algorithms.vanilla.ppo.model import MLPActorCritic
+from safe_rl.algorithms.vanilla.ppo.buffer import Buffer
 
 from safe_rl.utils.config import load_config
 
-def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium=True, use_cost_indicator=True,
-            env_id='SafetyPointGoal1-v0', seed=0, epochs=1000, steps_per_epoch=30000, gamma=0.99, lamda=0.97,
+def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium=True, use_cost_indicator=True, 
+            env_id='SafetyPointGoal1-v0', seed=0, epochs=1000, steps_per_epoch=30000, gamma=0.99, lamda=0.97, 
             clip_ratio=0.2, target_kl=0.01, penalty_init=1.0, pi_lr=3e-4, vf_lr=1e-3, penalty_lr=5e-2, cost_limit=25,
             train_pi_iters=80, train_v_iters=80, max_ep_len=1000):
     
@@ -38,7 +38,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
 
         env = gym.make(env_id)
         env.constrain_indicator = use_cost_indicator
-        
+
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
@@ -49,11 +49,11 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
     pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
     vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
     cvf_optimizer = Adam(ac.vc.parameters(), lr=vf_lr)
-    
+
     # Create directory for saving logs and models
     current_dir = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.normpath(os.path.join(current_dir, '../../../'))
-    run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-') + f'statewise-ppo-lag-{env_id}'
+    run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-') + f'ppo-lag-{env_id}'
     run_dir = os.path.join(root_dir, 'runs', run_id)
     os.makedirs(run_dir, exist_ok=True)
 
@@ -112,7 +112,6 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
     def update():
         train_logger = {
             'penalty': None,
-            'cost_dev': None,
             'loss_pi': [],
             'loss_v': [],
             'loss_cv': [],
@@ -125,9 +124,8 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
         #  Update penalty                                                     #
         #=====================================================================#
 
-        cur_cost = data['crew']
+        cur_cost = np.mean(rollout_logger['EpCost'])
         cost_dev = cur_cost - cost_limit
-        cost_dev = cost_dev.mean()
 
         loss_penalty = -penalty_param * cost_dev
 
@@ -137,7 +135,6 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
         penalty_param.data.clamp_(0.0, None)
 
         train_logger['penalty'] = penalty_param.item()
-        train_logger['cost_dev'] = cost_dev.item()
         train_logger['loss_penalty'].append(loss_penalty.item())
 
         #=====================================================================#
@@ -210,7 +207,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
             else:
                 next_o, r, d, info = env.step(a)
                 c = info['cost']
-                
+            
             ep_ret += r
             ep_cret += c
             ep_len += 1
@@ -283,15 +280,15 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium
             lowest_cost = current_cost
             torch.save(ac.state_dict(), os.path.join(run_dir, 'best_ppo_lag.pth'))
 
-        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}, cost_dev: {}'.format(epoch, current_return, current_cost, train_logger['penalty'], train_logger['cost_dev']))
+        print('Epoch: {} avg return: {}, avg cost: {}, penalty: {}'.format(epoch, current_return, current_cost, train_logger['penalty']))
         print('Loss pi: {}, Loss v: {}, Loss cv: {}, Loss penalty: {}\n'.format(np.mean(train_logger['loss_pi']), np.mean(train_logger['loss_v']), np.mean(train_logger['loss_cv']), np.mean(train_logger['loss_penalty'])))
 
     end_time = time.time()
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Statewise PPO Lagrangian')
-    parser.add_argument('--config', type=str, default='configs/statewise/ppo/ppo_lag.yaml', help='Path to the YAML configuration file (relative to project root)')
+    parser = argparse.ArgumentParser(description='PPO Lagrangian')
+    parser.add_argument('--config', type=str, default='configs/constrained/ppo/ppo_lag.yaml', help='Path to the YAML configuration file (relative to project root)')
     args = parser.parse_args()
 
     config = load_config(args.config)

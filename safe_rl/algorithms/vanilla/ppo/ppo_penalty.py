@@ -11,8 +11,8 @@ import pandas as pd
 import torch
 from torch.optim import Adam
 
-from safe_rl.algorithms.expected.ppo.model import MLPActorCritic
-from safe_rl.algorithms.expected.ppo.buffer import Buffer
+from safe_rl.algorithms.vanilla.ppo.model import MLPActorCritic
+from safe_rl.algorithms.vanilla.ppo.buffer import Buffer
 
 from safe_rl.utils.config import load_config
 
@@ -50,7 +50,7 @@ def ppo_penalty(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymna
     # Create directory for saving logs and models
     current_dir = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.normpath(os.path.join(current_dir, '../../../'))
-    run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-') + f'expected-ppo-penalty-{env_id}'
+    run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-') + f'ppo-penalty-{env_id}'
     run_dir = os.path.join(root_dir, 'runs', run_id)
     os.makedirs(run_dir, exist_ok=True)
 
@@ -244,8 +244,8 @@ def ppo_penalty(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymna
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Expected PPO Penalty')
-    parser.add_argument('--config', type=str, default='configs/expected/ppo/ppo_penalty.yaml', help='Path to the YAML configuration file (relative to project root)')
+    parser = argparse.ArgumentParser(description='PPO Penalty')
+    parser.add_argument('--config', type=str, default='configs/vanilla/ppo/ppo_penalty.yaml', help='Path to the YAML configuration file (relative to project root)')
     args = parser.parse_args()
 
     config = load_config(args.config)

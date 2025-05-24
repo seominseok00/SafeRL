@@ -1,5 +1,5 @@
 use_gymnasium: True
-use_cost_indicator: False
+use_cost_indicator: True
 
 env_id: SafetyPointGoal1-v0  # gymnasium
 # env_id: Safexp-PointGoal1-v0  # gym
