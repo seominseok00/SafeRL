@@ -16,7 +16,7 @@ from safe_rl.algorithms.vanilla.ppo.buffer import Buffer
 
 from safe_rl.utils.config import load_config
 
-def ppo_penalty(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymnasium=True, use_cost_indicator=True, 
+def ppo_penalty(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", use_cost_indicator=True, 
         env_id='SafetyPointGoal1-v0', seed=0, epochs=300, steps_per_epoch=30000, gamma=0.99, lamda=0.97,
         clip_ratio=0.2, target_kl=0.01, penalty_coef=1.0, pi_lr=3e-4, vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, max_ep_len=1000):
     
@@ -25,24 +25,27 @@ def ppo_penalty(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymna
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    if use_gymnasium:
+    if env_lib == "gymnasium":
+        import gymnasium
+        import highway_env
+        
+        env = gymnasium.make(env_id)
+
+    elif env_lib == "safety_gymnasium":
         import safety_gymnasium
 
         env = safety_gymnasium.make(env_id)
         env.task.cost_conf.constrain_indicator = use_cost_indicator
+    
     else:
-        import gym
-        import safety_gym
+        raise ValueError("Unsupported environment library: {}".format(env_lib))
         
-        env = gym.make(env_id)
-        env.constrain_indicator = use_cost_indicator
-        
-    obs_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.shape[0]
+    obs_space = env.observation_space
+    act_space = env.action_space
 
-    ac = actor_critic(obs_dim, act_dim, **ac_kwargs)
+    ac = actor_critic(obs_space, act_space, **ac_kwargs)
 
-    buf = Buffer(obs_dim, act_dim, steps_per_epoch, gamma, lamda)
+    buf = Buffer(obs_space, act_space, steps_per_epoch, gamma, lamda)
     
     pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
     vf_optimizer = Adam(ac.v.parameters(), lr=vf_lr)
@@ -147,21 +150,21 @@ def ppo_penalty(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymna
 
     best_return = -np.inf
     
-    if use_gymnasium:
+    if env_lib == "gymnasium":
+        o, info = env.reset()
+    elif env_lib == "safety_gymnasium":
         o, _ = env.reset()
-    else:
-        o = env.reset()
     ep_ret, ep_pen_ret, ep_cret, ep_len = 0, 0, 0, 0
 
     for epoch in range(epochs):
         for t in range(steps_per_epoch):
             a, v, vc, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
 
-            if use_gymnasium:
-                next_o, r, c, d, truncated, info = env.step(a)
-            else:
-                next_o, r, d, info = env.step(a)
+            if env_lib == "gymnasium":
+                next_o, r, d, truncated, info = env.step(a)
                 c = info['cost']
+            elif env_lib == "safety_gymnasium":
+                next_o, r, c, d, truncated, info = env.step(a)
 
             penalized_r = r - penalty_coef * c
             
@@ -195,10 +198,10 @@ def ppo_penalty(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), use_gymna
                     rollout_logger['EpPenRet'].append(ep_pen_ret)
                     rollout_logger['EpLen'].append(ep_len)
 
-                if use_gymnasium:
+                if env_lib == "gymnasium":
+                    o, info = env.reset()
+                elif env_lib == "safety_gymnasium":
                     o, _ = env.reset()
-                else:
-                    o = env.reset()
                 ep_ret, ep_pen_ret, ep_cret, ep_len = 0, 0, 0, 0
 
         #=====================================================================#

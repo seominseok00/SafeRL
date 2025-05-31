@@ -1,5 +1,7 @@
 import numpy as np
 
+from gymnasium.spaces import Box, Discrete
+
 import torch
 
 def discount_cumsum(x, discount):
@@ -11,12 +13,22 @@ def discount_cumsum(x, discount):
     return result
 
 class Buffer:
-    def __init__(self, obs_dim, act_dim, size, gamma=0.99, lamda=0.97):
+    def __init__(self, obs_space, act_space, size, gamma=0.99, lamda=0.97):
+        obs_dim = obs_space.shape[0]
+        
+        if isinstance(act_space, Box):
+            is_continuous = True
+            act_dim = act_space.shape[0]
+        
+        elif isinstance(act_space, Discrete):
+            is_continuous = False
+            act_dim = act_space.n
+            
         self.gamma = gamma
         self.lamda = lamda
 
         self.obs_buf = np.zeros([size, obs_dim], dtype=np.float32)
-        self.act_buf = np.zeros([size, act_dim], dtype=np.float32)
+        self.act_buf = np.zeros([size, act_dim], dtype=np.float32) if is_continuous else np.zeros([size], dtype=np.float32)
 
         self.rew_buf = np.zeros([size], dtype=np.float32)
         self.crew_buf = np.zeros([size], dtype=np.float32)
