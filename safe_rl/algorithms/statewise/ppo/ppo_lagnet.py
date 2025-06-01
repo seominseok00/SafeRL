@@ -83,16 +83,16 @@ def ppo_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="s
         ratio = torch.exp(logp - logp_old)
 
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
-        surr_adv = (torch.min(ratio * adv, clip_adv)).mean()
+        surr_adv = (torch.min(ratio * adv, clip_adv))
 
-        surro_cost = (ratio * cadv).mean()
+        surro_cost = (ratio * cadv)
 
-        penalty = penalty_net(obs)
-        penalty_item = penalty.mean().item()
+        penalty = penalty_net(obs).detach()
 
-        pi_objective = surr_adv - penalty_item * surro_cost
-        pi_objective = pi_objective / (1 + penalty_item)
+        pi_objective = surr_adv - penalty * surro_cost
+        pi_objective = pi_objective / (1 + penalty)
         loss_pi = -pi_objective
+        loss_pi = loss_pi.mean()
 
         approx_kl = (logp_old - logp).mean().item()
         pi_info = dict(kl=approx_kl)
