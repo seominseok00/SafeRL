@@ -245,5 +245,5 @@ if __name__ == '__main__':
     parser.add_argument('--config', type=str, default='configs/vanilla/ppo/ppo.yaml', help='Path to the YAML configuration file (relative to project root)')
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    ppo(config=config, **config)
+    config, original_config = load_config(args.config)
+    ppo(config=original_config, **config)

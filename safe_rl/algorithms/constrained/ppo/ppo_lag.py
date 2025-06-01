@@ -294,5 +294,5 @@ if __name__ == '__main__':
     parser.add_argument('--config', type=str, default='configs/constrained/ppo/ppo_lag.yaml', help='Path to the YAML configuration file (relative to project root)')
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    ppo_lag(config=config, **config)
+    config, original_config = load_config(args.config)
+    ppo_lag(config=original_config, **config)

@@ -1,4 +1,5 @@
 import os
+import copy
 import yaml
 import torch.nn.functional as F
 
@@ -26,6 +27,7 @@ def load_config(config_path):
 
     with open(cfg_path, 'r') as f:
         config = yaml.safe_load(f)
+        original_config = copy.deepcopy(config)
 
         if 'ac_kwargs' in config and 'activation' in config['ac_kwargs']:
             cfg_activation = config['ac_kwargs']['activation']
@@ -33,4 +35,4 @@ def load_config(config_path):
                 config['ac_kwargs']['activation'] = activations[cfg_activation]
             else:
                 raise ValueError(f"Unknown activation: {cfg_activation}")
-    return config
+    return config, original_config

@@ -308,5 +308,5 @@ if __name__ == '__main__':
     parser.add_argument('--config', type=str, default='configs/statewise/ppo/ppo_lagnet.yaml', help='Path to the YAML configuration file (relative to project root)')
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    ppo_lagnet(config=config, **config)
+    config, original_config = load_config(args.config)
+    ppo_lagnet(config=original_config, **config)

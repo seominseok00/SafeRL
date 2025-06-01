@@ -6,13 +6,13 @@ env_id: merge-v1  # highway_env
 # env_id: SafetyPointGoal1-v0  # safety_gymnasium
 
 ac_kwargs:
-  hid_dim: 64
+  hid_dim: 256
   activation: "tanh"
   
 seed: 0
 epochs: 1000
-steps_per_epoch: 750
-max_ep_len: 25
+steps_per_epoch: 900
+max_ep_len: 30
 
 gamma: 0.99
 lamda: 0.97

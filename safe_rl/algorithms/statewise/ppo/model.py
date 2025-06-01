@@ -79,7 +79,7 @@ class MLPCritic(nn.Module):
 class MLPActorCritic(nn.Module):
     def __init__(self, obs_space, act_space, hid_dim=64, activation=F.tanh):
         super(MLPActorCritic, self).__init__()
-        print('hid_dim: {}, activation: {}'.format(hid_dim, activation))
+        
         if isinstance(act_space, Box):  # safety-gymnasium
             obs_dim = obs_space.shape[0]
             act_dim = act_space.shape[0]
