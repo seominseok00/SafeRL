@@ -1,18 +1,18 @@
-env_lib: "gymnasium"
-# env_lib: "safety_gymnasium"
+# env_lib: "gymnasium"
+env_lib: "safety_gymnasium"
 use_cost_indicator: False
 
-env_id: merge-v1  # highway_env
-# env_id: SafetyPointGoal1-v0  # safety_gymnasium
+# env_id: merge-v1  # highway_env
+env_id: SafetyPointGoal1-v0  # safety_gymnasium
 
 ac_kwargs:
-  hid_dim: 256
+  hid_dim: 64
   activation: "tanh"
   
 seed: 0
 epochs: 1000
-steps_per_epoch: 900
-max_ep_len: 30
+steps_per_epoch: 30000
+max_ep_len: 1000
 
 gamma: 0.99
 lamda: 0.97
