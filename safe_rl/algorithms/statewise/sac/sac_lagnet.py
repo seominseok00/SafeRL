@@ -1,51 +1,53 @@
+import argparse
 import os
 import time
+import yaml
 import itertools
 from copy import deepcopy
 from collections import defaultdict, deque
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
 import torch
-import torch.nn.functional as F
 from torch.optim import Adam
 
 from safe_rl.algorithms.vanilla.sac.model import MLPActorCritic, MLPPenalty
 from safe_rl.algorithms.vanilla.sac.buffer import Buffer
 
-USE_GYMNASIUM = True
-USE_COST_INDICATOR = False
+from safe_rl.utils.config import load_config
 
-if USE_GYMNASIUM:
-    import safety_gymnasium
-else:
-    import gym
-    import safety_gym
-
-def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kwargs=dict(), seed=0,
-               epochs=300, steps_per_epoch=4000, replay_size=int(1e6), batch_size=100,
-               gamma=0.99, polyak=0.995, penalty_net=MLPPenalty, pi_lr=1e-5, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, auto_alpha=True,
-               warmup_epochs=20, start_steps=10000, update_after=1000, update_interval=50, update_iters=50, max_ep_len=1000, num_test_episodes=10):
+def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", env_id='SafetyPointGoal1-v0',
+            use_cost_indicator=True, seed=0, epochs=300, steps_per_epoch=4000, max_ep_len=1000, replay_size=int(1e6), batch_size=100,
+            gamma=0.99, polyak=0.995, penalty_net=MLPPenalty, penalty_kwargs=dict(), penalty_init=0.0, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, cost_limit=25,
+            start_steps=10000, warmup_epochs= 100, update_after=1000, update_interval=50, penalty_update_interval=25, update_iters=50, num_test_episodes=10):
     
     epoch_logger = []
 
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    env, test_env = env_fn(), env_fn()
+    if env_lib == "gymnasium":
+        import gymnasium
+        import highway_env
 
-    if USE_GYMNASIUM:
-        env.task.cost_conf.constrain_indicator = USE_COST_INDICATOR
-        test_env.task.cost_conf.constrain_indicator = USE_COST_INDICATOR
+        env, test_env = gymnasium.make(env_id), gymnasium.make(env_id)
+
+    elif env_lib == "safety_gymnasium":
+        import safety_gymnasium
+
+        env, test_env = safety_gymnasium.make(env_id), safety_gymnasium.make(env_id)
+        
+        env.task.cost_conf.constrain_indicator = use_cost_indicator
+        test_env.task.cost_conf.constrain_indicator = use_cost_indicator
+
     else:
-        env.constrain_indicator = USE_COST_INDICATOR
-        test_env.constrain_indicator = USE_COST_INDICATOR
+        raise ValueError("Unsupported environment library: {}".format(env_lib))
 
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     
-    ac_kwargs['auto_alpha'] = auto_alpha
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
     ac_targ = deepcopy(ac)
 
@@ -61,16 +63,29 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
     pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)
     qc_optimizer = Adam(qc_params, lr=q_lr)
-    if auto_alpha:
+
+    if ac_kwargs['auto_alpha']:
         alpha_optimizer = Adam([ac.log_alpha], lr=alpha_lr)
 
     target_entropy = -float(act_dim)
+
+    # Create directory for saving logs and models
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.normpath(os.path.join(current_dir, '../../../'))
+    run_id = datetime.now().strftime('%Y-%m-%d-%H-%M-') + f'sac-lagnet-{env_id}'
+    run_dir = os.path.join(root_dir, 'runs', run_id)
+    os.makedirs(run_dir, exist_ok=True)
+
+    # Save configuration
+    config_save_path = os.path.join(run_dir, 'config.yaml')
+    with open(config_save_path, 'w') as f:
+        yaml.dump(config, f, sort_keys=False)
     
     #=====================================================================#
     #  Define Lagrangian multiplier network for penalty learning          #
     #=====================================================================#
 
-    penalty_net = penalty_net(obs_dim ,act_dim, **penalty_kwargs)
+    penalty_net = penalty_net(obs_dim, act_dim, **penalty_kwargs, penalty_init=penalty_init)
     penalty_optimizer = Adam(penalty_net.parameters(), lr=penalty_lr)
 
 
@@ -94,17 +109,15 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
         qc2 = ac.qc2(o, a)
         qc = torch.min(qc1, qc2)
 
-        penalty_param = penalty_net(o, a)
-        penalty = F.softplus(penalty_param)
-        penalty_item = penalty.mean().item()
+        penalty = penalty_net(o, a).detach()
 
-        cost_term = penalty_item * qc
+        cost_term = penalty * qc
 
         pi_objective = reward_term + cost_term
-        pi_objective = pi_objective / (1 + penalty_item)
+        pi_objective = pi_objective / (1 + penalty)
         loss_pi = pi_objective.mean()
 
-        if auto_alpha:
+        if ac_kwargs['auto_alpha']:
             loss_alpha = -(ac.log_alpha.exp() * (logp_a + target_entropy).detach()).mean()
         else:
             loss_alpha = torch.tensor(0.0)
@@ -217,7 +230,7 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
         loss_pi.backward()
         pi_optimizer.step()
 
-        if auto_alpha:
+        if ac_kwargs['auto_alpha']:
             alpha_optimizer.zero_grad()
             loss_alpha.backward()
             alpha_optimizer.step()
@@ -270,19 +283,19 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
         }
 
         for j in range(num_test_episodes):
-            if USE_GYMNASIUM:
+            if env_lib == "gymnasium":
+                o, info = test_env.reset()
+            elif env_lib == "safety_gymnasium":
                 o, _ = test_env.reset()
-            else:
-                o = test_env.reset()
             d = False
             ep_ret, ep_cret, ep_len = 0, 0, 0
 
             while not (d or ep_len == max_ep_len):
-                if USE_GYMNASIUM:
-                    o, r, c, d, truncated, info = test_env.step(get_action(o, True))
-                else:
-                    o, r, d, info = test_env.step(get_action(o, True))
+                if env_lib == "gymnasium":
+                    o, r, d, truncated, info = test_env.step(a)
                     c = info['cost']
+                elif env_lib == "safety_gymnasium":
+                    o, r, c, d, truncated, info = test_env.step(get_action(o, True))
                 
                 ep_ret += r
                 ep_cret += c
@@ -293,7 +306,7 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
             test_logger['TestEpLen'].append(ep_len)
 
         return test_logger
-
+    
 
     #=========================================================================#
     #  Run main environment interaction loop                                  #
@@ -315,10 +328,10 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
 
     update_logger = defaultdict(list)
 
-    if USE_GYMNASIUM:
+    if env_lib == "gymnasium":
+        o, info = env.reset()
+    elif env_lib == "safety_gymnasium":
         o, _ = env.reset()
-    else:
-        o = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
     for epoch in range(epochs):
@@ -330,11 +343,11 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
             else:
                 a = env.action_space.sample()
 
-            if USE_GYMNASIUM:
-                next_o, r, c, d, truncated, info = env.step(a)
-            else:
-                next_o, r, d, info = env.step(a)
+            if env_lib == "gymnasium":
+                next_o, r, d, truncated, info = env.step(a)
                 c = info['cost']
+            elif env_lib == "safety_gymnasium":
+                next_o, r, c, d, truncated, info = env.step(get_action(o, True))
 
             ep_ret += r
             ep_cret += c
@@ -353,10 +366,10 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
                 rollout_logger['EpCost'].append(ep_cret)
                 rollout_logger['EpLen'].append(ep_len)
 
-                if USE_GYMNASIUM:
+                if env_lib == "gymnasium":
+                    o, info = env.reset()
+                elif env_lib == "safety_gymnasium":
                     o, _ = env.reset()
-                else:
-                    o = env.reset()
                 ep_ret, ep_cret, ep_len = 0, 0, 0
 
             #=====================================================================#
@@ -400,12 +413,10 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
 
         # Save log
         epoch_logger_df = pd.DataFrame(epoch_logger)
-        os.makedirs('../logs/sac', exist_ok=True)
-        epoch_logger_df.to_csv('../logs/sac/sac_lagnet.csv', index=False)
+        epoch_logger_df.to_csv(os.path.join(run_dir, 'sac_lagnet.csv'), index=False)
 
         # Save model
-        os.makedirs('../trained_models/sac', exist_ok=True)
-        torch.save(ac.state_dict(), '../trained_models/sac/sac_lagnet.pth')
+        torch.save(ac.state_dict(), os.path.join(run_dir, 'sac_lagnet.pth'))
 
         # Save best model
         current_return = np.mean(test_logger['TestEpRet'])
@@ -414,7 +425,7 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
         if current_return >= best_return and current_cost <= lowest_cost:
             best_return = current_return
             lowest_cost = current_cost
-            torch.save(ac.state_dict(), '../trained_models/sac/best_sac_lagnet.pth')
+            torch.save(ac.state_dict(), os.path.join(run_dir, 'best_sac_lagnet.pth'))
 
         print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha']), np.mean(update_logger['penalty'])))
         print('Test avg return: {}, avg cost: {}'.format(current_return, current_cost))
@@ -426,7 +437,9 @@ def sac_lagnet(env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), penalty_kw
     print('Training time: {}h {}m {}s'.format(int((end_time - start_time) // 3600), int((end_time - start_time) % 3600 // 60), int((end_time - start_time) % 60)))
 
 if __name__ == '__main__':
-    if USE_GYMNASIUM:
-        sac_lagnet(lambda: safety_gymnasium.make('SafetyPointGoal1-v0'))
-    else:
-        sac_lagnet(lambda: gym.make('Safexp-PointGoal1-v0'))
+    parser = argparse.ArgumentParser(description='SAC Lagrangian Network')
+    parser.add_argument('--config', type=str, default='configs/statewise/sac/sac_lagnet.yaml', help='Path to the YAML configuration file (relative to project root)')
+    args = parser.parse_args()
+
+    config, original_config = load_config(args.config)
+    sac_lag(config=original_config, **config)

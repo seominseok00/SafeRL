@@ -93,15 +93,18 @@ class MLPActorCritic(nn.Module):
             return a.numpy()
         
 class MLPPenalty(nn.Module):
-    def __init__(self, obs_dim, act_dim, hid_dim=64, activation=F.tanh):
+    def __init__(self, obs_dim, act_dim, hid_dim=64, activation=F.tanh, penalty_init=1.0):
         super(MLPPenalty, self).__init__()
         self.fc1 = nn.Linear(obs_dim + act_dim, hid_dim)
         self.fc2 = nn.Linear(hid_dim, hid_dim)
         self.fc3 = nn.Linear(hid_dim, 1)
         self.activation = activation
 
+        nn.init.constant_(self.fc3.bias, penalty_init)
+
     def forward(self, obs, act):
         x = self.activation(self.fc1(torch.cat([obs, act], dim=-1)))
         x = self.activation(self.fc2(x))
-        q = self.fc3(x)
+        x = self.fc3(x)
+        q = F.softplus(x)
         return torch.squeeze(q, -1)
