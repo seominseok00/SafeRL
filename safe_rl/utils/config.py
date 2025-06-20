@@ -36,10 +36,10 @@ def load_config(config_path):
             else:
                 raise ValueError(f"Unknown activation: {cfg_activation}")
             
-        if 'penalty_kwargs' in config and 'activation' in config['penalty_kwargs']:
-            cfg_activation = config['penalty_kwargs']['activation']
+        if 'lagrange_kwargs' in config and 'activation' in config['lagrange_kwargs']:
+            cfg_activation = config['lagrange_kwargs']['activation']
             if cfg_activation in activations:
-                config['penalty_kwargs']['activation'] = activations[cfg_activation]
+                config['lagrange_kwargs']['activation'] = activations[cfg_activation]
             else:
                 raise ValueError(f"Unknown activation: {cfg_activation}")
 

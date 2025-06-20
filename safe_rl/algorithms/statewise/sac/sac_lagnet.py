@@ -13,15 +13,15 @@ import pandas as pd
 import torch
 from torch.optim import Adam
 
-from safe_rl.algorithms.vanilla.sac.model import MLPActorCritic, MLPPenalty
+from safe_rl.algorithms.vanilla.sac.model import MLPActorCritic, MLPLagrangeMultiplier
 from safe_rl.algorithms.vanilla.sac.buffer import Buffer
 
 from safe_rl.utils.config import load_config
 
 def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", env_id='SafetyPointGoal1-v0',
             use_cost_indicator=True, seed=0, epochs=300, steps_per_epoch=4000, max_ep_len=1000, replay_size=int(1e6), batch_size=100,
-            gamma=0.99, polyak=0.995, penalty_net=MLPPenalty, penalty_kwargs=dict(), penalty_init=0.0, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, penalty_lr=1e-5, cost_limit=25,
-            start_steps=10000, warmup_epochs= 100, update_after=1000, update_interval=50, penalty_update_interval=25, update_iters=50, num_test_episodes=10):
+            gamma=0.99, polyak=0.995, lagrange_network=MLPLagrangeMultiplier, lagrange_kwargs=dict(), lagrange_init=0.0, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, lagrange_lr=1e-5, cost_limit=25,
+            start_steps=10000, warmup_epochs= 100, update_after=1000, update_interval=50, lagrange_update_interval=25, update_iters=50, num_test_episodes=10):
     
     epoch_logger = []
 
@@ -85,8 +85,8 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
     #  Define Lagrangian multiplier network for penalty learning          #
     #=====================================================================#
 
-    penalty_net = penalty_net(obs_dim, act_dim, **penalty_kwargs, penalty_init=penalty_init)
-    penalty_optimizer = Adam(penalty_net.parameters(), lr=penalty_lr)
+    lagrange_net = lagrange_network(obs_dim, act_dim, **lagrange_kwargs, lagrange_init=lagrange_init)
+    lagrange_optimizer = Adam(lagrange_net.parameters(), lr=lagrange_lr)
 
 
     #=====================================================================#
@@ -103,18 +103,25 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         q = torch.min(q1, q2)
 
         # Entropy regularized policy loss
-        reward_term = (ac.log_alpha.exp() * logp_a - q)
+        reward_term = (ac.log_alpha.exp() * logp_a - q)  # alpha * logp_a - Q(s, a)
+        '''
+        Q(s, a)는 최대화시키고, logp_a는 최소화시킴(logp_a를 최소화하려면 정책이 무작위적이어야 하고 -> 따라서 alpha * logp_a를 최소화하는 것은 엔트로피를 키우는 방향으로 업데이트 하는 것)
+        SAC는 Q(s, a)가 높은 행동을 많이 하도록 학습하는데, 그러면 local optima에 빠질 수 있음. => 엔트로피 항을 추가하여 균형있게 학습
+        => 이렇게 학습할 경우 아래 두 가지를 균형있게 학습 (alpha가 이를 조절하는 entropy regularization coefficient)
+        1. Q(s, a): 현재 정책이 선택한 행동이 얼마나 좋은지
+        2. alpha * logp_a: 현재 정책이 얼마나 무작위적인지 (엔트로피)
+        '''
 
         qc1 = ac.qc1(o, a)
         qc2 = ac.qc2(o, a)
         qc = torch.min(qc1, qc2)
 
-        penalty = penalty_net(o, a).detach()
+        lagrange_multiplier = lagrange_net(o).detach()
 
-        cost_term = penalty * qc
+        cost_term = lagrange_multiplier * qc
 
         pi_objective = reward_term + cost_term
-        pi_objective = pi_objective / (1 + penalty)
+        pi_objective = pi_objective / (1 + lagrange_multiplier)
         loss_pi = pi_objective.mean()
 
         if ac_kwargs['auto_alpha']:
@@ -144,6 +151,10 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             q2_target = ac_targ.q2(o2, a2)
             q_target = torch.min(q1_target, q2_target)
 
+            '''
+            SAC는 entropy를 보상의 일부로 간주해서 Q function으로 나타내려 함
+            p_a2는 확률이어서 0~1 사이의 값인데, 이 값에 log를 취하면 음수가되니까, 이를 보상으로 처리하기 위해 -ac.log_alpha.exp() * logp_a2를 더해줌 (정책이 무작위일수록 보상이 더 커지도록)
+            '''
             backup_q = r + gamma * (1 - d) * (q_target - ac.log_alpha.exp() * logp_a2)
 
         # MSE loss against Bellman backup
@@ -168,10 +179,9 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
 
         return loss_q, loss_qc
     
-    def compute_loss_penalty(data):
-        o, a = data['obs'], data['act']
-        cost_limit = 25
-
+    def compute_loss_lagrange(data):
+        o, a, cost = data['obs'], data['act'], data['crew']
+        
         with torch.no_grad():
             qc1 = ac.qc1(o, a)
             qc2 = ac.qc2(o, a)
@@ -179,22 +189,22 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
 
         cost_dev = qc - cost_limit
 
-        penalty = penalty_net(o, a)
+        lagrange_multiplier = lagrange_net(o)
         
-        loss_penalty = -penalty * cost_dev
-        loss_penalty = loss_penalty.mean()
+        loss_lagrange = -lagrange_multiplier * cost_dev
+        loss_lagrange = loss_lagrange.mean()
 
-        return loss_penalty
+        return loss_lagrange
 
-    def update(data):
+    def update(data, lagrange_update=False):
         train_logger = {
             'alpha': [],
-            'penalty': [],
+            'lagrange': [],
             'loss_pi': [],
             'loss_q': [],
             'loss_qc': [],
             'loss_alpha': [],
-            'loss_penalty': []
+            'loss_lagrange': []
         }
 
         #=====================================================================#
@@ -240,16 +250,19 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         train_logger['loss_alpha'].append(loss_alpha.item())
 
         #=====================================================================#
-        #  Update penalty                                                     #
+        #  Update Lagrange multiplier network                                 #
         #=====================================================================#
-        loss_penalty = compute_loss_penalty(data)
+        if lagrange_update:
+            loss_lagrange = compute_loss_lagrange(data)
 
-        penalty_optimizer.zero_grad()
-        loss_penalty.backward()
-        penalty_optimizer.step()
+            lagrange_optimizer.zero_grad()
+            loss_lagrange.backward()
+            lagrange_optimizer.step()
+        else:
+            loss_lagrange = torch.tensor(0.0)
 
-        train_logger['penalty'].append(penalty_net(data['obs'], data['act']).mean().item())
-        train_logger['loss_penalty'].append(loss_penalty.item())
+        train_logger['lagrange'].append(lagrange_net(data['obs']).mean().item())
+        train_logger['loss_lagrange'].append(loss_lagrange.item())
 
         # Unfreeze Q-networks
         for p in q_params:
@@ -379,7 +392,11 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             if total_steps >= update_after and total_steps % update_interval == 0:
                 for j in range(update_iters):
                     batch = buf.sample_batch(batch_size)
-                    train_logger = update(batch)
+
+                    if epoch > warmup_epochs and j % lagrange_update_interval == 0:
+                        train_logger = update(batch, True)
+                    else:
+                        train_logger = update(batch, False)
 
                     for k, v in train_logger.items():
                         update_logger[k] += v
@@ -403,12 +420,12 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             'TestEpCost': np.mean(test_logger['TestEpCost']),
             'TestEpLen': np.mean(test_logger['TestEpLen']),
             'alpha': np.mean(update_logger['alpha']),
-            'penalty': np.mean(update_logger['penalty']),
+            'lagrange': np.mean(update_logger['lagrange']),
             'loss_pi': np.mean(update_logger['loss_pi']),
             'loss_q': np.mean(update_logger['loss_q']),
             'loss_qc': np.mean(update_logger['loss_qc']),
             'loss_alpha': np.mean(update_logger['loss_alpha']),
-            'loss_penalty': np.mean(update_logger['loss_penalty']),
+            'loss_lagrange': np.mean(update_logger['loss_lagrange']),
         })
 
         # Save log
@@ -427,9 +444,9 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             lowest_cost = current_cost
             torch.save(ac.state_dict(), os.path.join(run_dir, 'best_sac_lagnet.pth'))
 
-        print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}, penalty: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha']), np.mean(update_logger['penalty'])))
+        print('Epoch: {} avg return: {}, avg cost: {}, alpha: {}, lagrange: {}'.format(epoch, np.mean(rollout_logger['EpRet']), np.mean(rollout_logger['EpCost']), np.mean(update_logger['alpha']), np.mean(update_logger['lagrange'])))
         print('Test avg return: {}, avg cost: {}'.format(current_return, current_cost))
-        print('Loss pi: {}, Loss q: {}, Loss qc: {}, Loss alpha: {}, Loss penalty: {}\n'.format(np.mean(update_logger['loss_pi']), np.mean(update_logger['loss_q']), np.mean(update_logger['loss_qc']), np.mean(update_logger['loss_alpha']), np.mean(update_logger['loss_penalty'])))
+        print('Loss pi: {}, Loss q: {}, Loss qc: {}, Loss alpha: {}, Loss lagrange: {}\n'.format(np.mean(update_logger['loss_pi']), np.mean(update_logger['loss_q']), np.mean(update_logger['loss_qc']), np.mean(update_logger['loss_alpha']), np.mean(update_logger['loss_lagrange'])))
 
         update_logger.clear()
         

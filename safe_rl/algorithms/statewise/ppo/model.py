@@ -108,9 +108,9 @@ class MLPActorCritic(nn.Module):
     def act(self, obs):
         return self.step(obs)[0]
     
-class MLPPenalty(nn.Module):
-    def __init__(self, obs_space, hid_dim=64, activation=F.tanh, penalty_init=1.0):
-        super(MLPPenalty, self).__init__()
+class MLPLagrangeMultiplier(nn.Module):
+    def __init__(self, obs_space, hid_dim=64, activation=F.tanh, lagrange_init=1.0):
+        super(MLPLagrangeMultiplier, self).__init__()
         obs_dim = obs_space.shape[0]
         
         self.fc1 = nn.Linear(obs_dim, hid_dim)
@@ -118,7 +118,7 @@ class MLPPenalty(nn.Module):
         self.fc3 = nn.Linear(hid_dim, 1)
         self.activation = activation
 
-        nn.init.constant_(self.fc3.bias, penalty_init)
+        nn.init.constant_(self.fc3.bias, lagrange_init)
 
     def forward(self, obs):
         x = self.activation(self.fc1(obs))

@@ -19,12 +19,12 @@ lamda: 0.97
 clip_ratio: 0.2
 target_kl: 0.01
 
-penalty_init: 0.0
+lagrange_init: 0.0
 cost_limit: 0.0
 
 pi_lr: 0.0003
 vf_lr: 0.001
-penalty_lr: 0.05
+lagrange_lr: 0.05
 
 train_pi_iters: 80
 train_v_iters: 80
