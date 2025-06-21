@@ -82,14 +82,20 @@ class MLPActorCritic(nn.Module):
         self.qc2 = MLPQFunction(obs_dim, act_dim, hid_dim, activation)
 
         if auto_alpha:
-            self.log_alpha = torch.tensor(np.log(self.init_alpha), requires_grad=True)
+            self.log_alpha = nn.Parameter(torch.tensor(np.log(self.init_alpha), dtype=torch.float32))
         else:
-            self.log_alpha = torch.tensor(np.log(self.init_alpha), requires_grad=False)
+            self.log_alpha = nn.Parameter(torch.tensor(np.log(self.init_alpha), dtype=torch.float32), requires_grad=False)
         
     def act(self, obs, deterministic=False):
         with torch.no_grad():
+            if not isinstance(obs, torch.Tensor):
+                obs = torch.as_tensor(obs, dtype=torch.float32)
+
+            device = next(self.parameters()).device
+            obs = obs.to(device)
+
             a, _ = self.pi(obs, deterministic, False)
-            return a.numpy()
+            return a.cpu().numpy()
         
 class MLPLagrangeMultiplier(nn.Module):
     def __init__(self, obs_dim, act_dim, hid_dim=64, activation=F.tanh, lagrange_init=1.0):
@@ -103,6 +109,12 @@ class MLPLagrangeMultiplier(nn.Module):
         nn.init.constant_(self.fc3.bias, lagrange_init)
 
     def forward(self, obs):
+        if not isinstance(obs, torch.Tensor):
+            obs = torch.as_tensor(obs, dtype=torch.float32)
+
+        device = next(self.parameters()).device
+        obs = obs.to(device)
+        
         x = self.activation(self.fc1(obs))
         x = self.activation(self.fc2(x))
         x = self.fc3(x)

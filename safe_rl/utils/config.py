@@ -1,6 +1,7 @@
 import os
 import copy
 import yaml
+import torch
 import torch.nn.functional as F
 
 activations = {
@@ -44,3 +45,21 @@ def load_config(config_path):
                 raise ValueError(f"Unknown activation: {cfg_activation}")
 
     return config, original_config
+
+def get_device(device_type=None):
+    try:
+        if device_type is not None:
+            device = torch.device(device_type)
+            if device.type == "cuda" and not torch.cuda.is_available():
+                raise RuntimeError("CUDA is not available.")
+            if device.type == "mps" and not torch.backends.mps.is_available():
+                raise RuntimeError("MPS is not available.")
+        else:
+            raise RuntimeError("No device specified.")
+    except Exception:
+        device = (
+            torch.device("cuda") if torch.cuda.is_available() else
+            torch.device("mps") if torch.backends.mps.is_available() else
+            torch.device("cpu")
+        )
+    return device

@@ -1,9 +1,10 @@
-# env_lib: "gymnasium"
-# env_id: merge-v1  # highway_env
-
 env_lib: "safety_gymnasium"
 env_id: SafetyPointGoal1-v0  # safety_gymnasium
 use_cost_indicator: True
+device: "cuda"
+
+# env_lib: "gymnasium"
+# env_id: merge-v1  # highway_env
 
 ac_kwargs:
   hid_dim: 64

@@ -14,12 +14,14 @@ from torch.optim import Adam
 from safe_rl.algorithms.vanilla.ppo.model import MLPActorCritic
 from safe_rl.algorithms.vanilla.ppo.buffer import Buffer
 
-from safe_rl.utils.config import load_config
+from safe_rl.utils.config import load_config, get_device
 
 def ppo(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", use_cost_indicator=True, 
         env_id='SafetyPointGoal1-v0', seed=0, epochs=300, steps_per_epoch=30000, gamma=0.99, lamda=0.97,
-        clip_ratio=0.2, target_kl=0.01, pi_lr=3e-4, vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, max_ep_len=1000):
+        clip_ratio=0.2, target_kl=0.01, pi_lr=3e-4, vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, max_ep_len=1000, device=None):
     
+    device = get_device(device)
+
     epoch_logger = []
 
     np.random.seed(seed)
@@ -43,7 +45,7 @@ def ppo(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
     obs_space = env.observation_space
     act_space = env.action_space
 
-    ac = actor_critic(obs_space, act_space, **ac_kwargs)
+    ac = actor_critic(obs_space, act_space, **ac_kwargs).to(device)
 
     buf = Buffer(obs_space, act_space, steps_per_epoch, gamma, lamda)
     
@@ -98,6 +100,7 @@ def ppo(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
         }
 
         data = buf.get()
+        data = {k: v.to(device) for k, v in data.items()}
 
         #=====================================================================#
         #  Update policy                                                      #
@@ -155,9 +158,11 @@ def ppo(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
         o, _ = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
+    print("🚀 Training on device: ", {next(ac.parameters()).device})
+
     for epoch in range(epochs):
         for t in range(steps_per_epoch):
-            a, v, vc, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            a, v, vc, logp = ac.step(torch.as_tensor(o, dtype=torch.float32).to(device))
 
             if env_lib == "gymnasium":
                 next_o, r, d, truncated, info = env.step(a)
@@ -182,7 +187,7 @@ def ppo(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
                     print('Warning: trajectory cut off due to end of epoch')
                 
                 if timeout or epoch_ended:
-                    _, v, vc, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                    _, v, vc, _ = ac.step(torch.as_tensor(o, dtype=torch.float32).to(device))
                 else:
                     v, vc = 0, 0
 

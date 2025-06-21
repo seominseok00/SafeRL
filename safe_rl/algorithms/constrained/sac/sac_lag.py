@@ -16,13 +16,15 @@ from torch.optim import Adam
 from safe_rl.algorithms.vanilla.sac.model import MLPActorCritic
 from safe_rl.algorithms.vanilla.sac.buffer import Buffer
 
-from safe_rl.utils.config import load_config
+from safe_rl.utils.config import load_config, get_device
 
 
 def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", env_id='SafetyPointGoal1-v0',
             use_cost_indicator=True, seed=0, epochs=300, steps_per_epoch=4000, max_ep_len=1000, replay_size=int(1e6), batch_size=100,
             gamma=0.99, polyak=0.995, lagrange_init=0.0, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, lagrange_lr=1e-5, cost_limit=25,
-            start_steps=10000, warmup_epochs= 100, update_after=1000, update_interval=50, lagrange_update_interval=25, update_iters=50, num_test_episodes=10):
+            start_steps=10000, warmup_epochs= 100, update_after=1000, update_interval=50, lagrange_update_interval=25, update_iters=50, num_test_episodes=10, device=None):
+    
+    device = get_device(device)
     
     epoch_logger = []
 
@@ -49,8 +51,8 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
-    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
-    ac_targ = deepcopy(ac)
+    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs).to(device)
+    ac_targ = deepcopy(ac).to(device)
 
     buf = Buffer(obs_dim, act_dim, replay_size)
 
@@ -87,7 +89,7 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
     #  Define Lagrangian multiplier for penalty learning                  #
     #=====================================================================#
 
-    lagrange_multiplier = torch.nn.Parameter(torch.tensor(lagrange_init, dtype=torch.float32), requires_grad=True)
+    lagrange_multiplier = torch.nn.Parameter(torch.tensor(lagrange_init, dtype=torch.float32, device=device))
     lagrange_optimizer = Adam([lagrange_multiplier], lr=lagrange_lr)
 
     #=====================================================================#
@@ -246,7 +248,9 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             lagrange_optimizer.zero_grad()
             loss_lagrange.backward()
             lagrange_optimizer.step()
-            lagrange_multiplier.data.clamp_(0.0, None)
+            
+            with torch.no_grad():
+                lagrange_multiplier.clamp_(min=0.0)
 
         else:
             loss_lagrange = torch.tensor(0.0)
@@ -272,7 +276,7 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         return train_logger
 
     def get_action(o, deterministic=False):
-        return ac.act(torch.as_tensor(o, dtype=torch.float32), deterministic)
+        return ac.act(torch.as_tensor(o, dtype=torch.float32).to(device), deterministic)
     
     #=====================================================================#
     #  Run test episodes using deterministic policy                       #
@@ -337,6 +341,8 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         o, _ = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
+    print("🚀 Training on device: ", {next(ac.parameters()).device})
+
     for epoch in range(epochs):
         for t in range(steps_per_epoch):
             total_steps += 1
@@ -382,7 +388,9 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             if total_steps >= update_after and total_steps % update_interval == 0:
                 for j in range(update_iters):
                     batch = buf.sample_batch(batch_size)
+                    batch = {k: v.to(device) for k, v in batch.items()} 
                     batch['cur_cost'] = np.mean(rollout_logger['EpCost'])
+
                     if epoch > warmup_epochs and j % lagrange_update_interval == 0:
                         train_logger = update(batch, True)
                     else:    

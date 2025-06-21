@@ -98,12 +98,15 @@ class MLPActorCritic(nn.Module):
             if not isinstance(obs, torch.Tensor):
                 obs = torch.as_tensor(obs, dtype=torch.float32)
 
+            device = next(self.parameters()).device
+            obs = obs.to(device)
+
             pi = self.pi._distribution(obs)
             a = pi.sample()
             logp_a = self.pi._log_prob_from_distribution(pi, a)
             v = self.v(obs)
             vc = self.vc(obs)
-        return a.numpy(), v.numpy(), vc.numpy(), logp_a.numpy()
+        return a.cpu().numpy(), v.cpu().numpy(), vc.cpu().numpy(), logp_a.cpu().numpy()
 
     def act(self, obs):
         return self.step(obs)[0]
@@ -121,6 +124,12 @@ class MLPLagrangeMultiplier(nn.Module):
         nn.init.constant_(self.fc3.bias, lagrange_init)
 
     def forward(self, obs):
+        if not isinstance(obs, torch.Tensor):
+            obs = torch.as_tensor(obs, dtype=torch.float32)
+
+        device = next(self.parameters()).device
+        obs = obs.to(device)
+        
         x = self.activation(self.fc1(obs))
         x = self.activation(self.fc2(x))
         x = self.fc3(x)

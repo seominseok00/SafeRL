@@ -15,13 +15,15 @@ from torch.optim import Adam
 from safe_rl.algorithms.vanilla.ppo.model import MLPActorCritic
 from safe_rl.algorithms.vanilla.ppo.buffer import Buffer
 
-from safe_rl.utils.config import load_config
+from safe_rl.utils.config import load_config, get_device
 
 def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", use_cost_indicator=True, 
             env_id='SafetyPointGoal1-v0', seed=0, epochs=1000, steps_per_epoch=30000, gamma=0.99, lamda=0.97, 
             clip_ratio=0.2, target_kl=0.01, lagrange_init=1.0, pi_lr=3e-4, vf_lr=1e-3, lagrange_lr=5e-2, cost_limit=25,
-            train_pi_iters=80, train_v_iters=80, max_ep_len=1000):
+            train_pi_iters=80, train_v_iters=80, max_ep_len=1000, device=None):
     
+    device = get_device(device)
+
     epoch_logger = []
 
     np.random.seed(seed)
@@ -45,7 +47,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
     obs_space = env.observation_space
     act_space = env.action_space
 
-    ac = actor_critic(obs_space, act_space, **ac_kwargs)
+    ac = actor_critic(obs_space, act_space, **ac_kwargs).to(device)
 
     buf = Buffer(obs_space, act_space, steps_per_epoch, gamma, lamda)
     
@@ -69,7 +71,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
     #  Define Lagrangian multiplier for penalty learning                  #
     #=====================================================================#
 
-    lagrange_multiplier = torch.tensor(lagrange_init, requires_grad=True).float()
+    lagrange_multiplier = torch.nn.Parameter(torch.tensor(lagrange_init, dtype=torch.float32, device=device))
     lagrange_optimizer = Adam([lagrange_multiplier], lr=lagrange_lr)
 
     #=====================================================================#
@@ -122,6 +124,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         }
 
         data = buf.get()
+        data = {k: v.to(device) for k, v in data.items()}
 
         #=====================================================================#
         #  Update Lagrange multipler                                          #
@@ -135,7 +138,9 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         lagrange_optimizer.zero_grad()
         loss_lagrange.backward()
         lagrange_optimizer.step()
-        lagrange_multiplier.data.clamp_(0.0, None)
+        
+        with torch.no_grad():
+            lagrange_multiplier.clamp_(min=0.0)
 
         train_logger['lagrange'] = lagrange_multiplier.item()
         train_logger['loss_lagrange'].append(loss_lagrange.item())
@@ -201,9 +206,11 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         o, _ = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
+    print("🚀 Training on device: ", {next(ac.parameters()).device})
+
     for epoch in range(epochs):
         for t in range(steps_per_epoch):
-            a, v, vc, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
+            a, v, vc, logp = ac.step(torch.as_tensor(o, dtype=torch.float32).to(device))
 
             if env_lib == "gymnasium":
                 next_o, r, d, truncated, info = env.step(a)
@@ -228,7 +235,7 @@ def ppo_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
                     print('Warning: trajectory cut off due to end of epoch')
                 
                 if timeout or epoch_ended:
-                    _, v, vc, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
+                    _, v, vc, _ = ac.step(torch.as_tensor(o, dtype=torch.float32).to(device))
                 else:
                     v, vc = 0, 0
 
