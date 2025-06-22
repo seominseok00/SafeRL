@@ -78,8 +78,7 @@ class MLPActorCritic(nn.Module):
         self.q1 = MLPQFunction(obs_dim, act_dim, hid_dim, activation)
         self.q2 = MLPQFunction(obs_dim, act_dim, hid_dim, activation)
 
-        self.qc1 = MLPQFunction(obs_dim, act_dim, hid_dim, activation)
-        self.qc2 = MLPQFunction(obs_dim, act_dim, hid_dim, activation)
+        self.qc = MLPQFunction(obs_dim, act_dim, hid_dim, activation)
 
         if auto_alpha:
             self.log_alpha = nn.Parameter(torch.tensor(np.log(self.init_alpha), dtype=torch.float32))

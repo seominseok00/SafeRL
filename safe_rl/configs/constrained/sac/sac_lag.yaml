@@ -7,22 +7,20 @@ device: "cuda"
 # env_id: merge-v1  # highway_env
 
 ac_kwargs:
-  hid_dim: 64
-  activation: "tanh"
-  auto_alpha: True
+  hid_dim: 256
+  activation: "relu"
+  auto_alpha: False
+  init_alpha: 0.00001
 
 seed: 0
-epochs: 300
-steps_per_epoch: 4000
+epochs: 5000
+steps_per_epoch: 2000
 max_ep_len: 1000
 replay_size: 1000000
-batch_size: 100
+batch_size: 256
 
 start_steps: 10000
-warmup_epochs: 20
-update_after: 1000
-update_interval: 50
-lagrange_update_interval: 25
+warmup_epochs: 100
 
 gamma: 0.99
 polyak: 0.995
@@ -30,10 +28,11 @@ polyak: 0.995
 lagrange_init: 0.0
 cost_limit: 25.0
 
-pi_lr: 0.001
+pi_lr: 0.000005
 q_lr: 0.001
-alpha_lr: 0.001
-lagrange_lr: 0.0003
+alpha_lr: 0.001  # same with q_lr
+lagrange_lr: 0.0000005
 
-update_iters: 50
-num_test_episodes: 10
+update_iters: 1
+policy_delay: 2
+num_test_episodes: 1
