@@ -19,9 +19,9 @@ from safe_rl.algorithms.vanilla.sac.buffer import Buffer
 from safe_rl.utils.config import load_config, get_device
 
 def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", env_id='SafetyPointGoal1-v0',
-            use_cost_indicator=True, seed=0, epochs=300, steps_per_epoch=4000, max_ep_len=1000, replay_size=int(1e6), batch_size=100,
-            gamma=0.99, polyak=0.995, lagrange_network=MLPLagrangeMultiplier, lagrange_kwargs=dict(), lagrange_init=0.0, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, lagrange_lr=1e-5, cost_limit=25,
-            start_steps=10000, warmup_epochs= 100, update_after=1000, update_interval=50, lagrange_update_interval=25, update_iters=50, num_test_episodes=10, device=None):
+            use_cost_indicator=True, seed=0, epochs=5000, steps_per_epoch=2000, max_ep_len=1000, replay_size=int(1e6), batch_size=256,
+            gamma=0.99, polyak=0.995, lagrange_network=MLPLagrangeMultiplier, lagrange_kwargs=dict(), lagrange_init=0.0, pi_lr=5e-6, q_lr=1e-3, alpha_lr=1e-3, lagrange_lr=5e-7, cost_limit=25,
+            start_steps=10000, warmup_epochs= 100, update_iters=1, policy_delay=2, num_test_episodes=1, device=None):
     
     device = get_device(device)
 
@@ -60,11 +60,10 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         p.requires_grad = False
 
     q_params = itertools.chain(ac.q1.parameters(), ac.q2.parameters())
-    qc_params = itertools.chain(ac.qc1.parameters(), ac.qc2.parameters())
 
     pi_optimizer = Adam(ac.pi.parameters(), lr=pi_lr)
     q_optimizer = Adam(q_params, lr=q_lr)
-    qc_optimizer = Adam(qc_params, lr=q_lr)
+    qc_optimizer = Adam(ac.qc.parameters(), lr=q_lr)
 
     if ac_kwargs['auto_alpha']:
         alpha_optimizer = Adam([ac.log_alpha], lr=alpha_lr)
@@ -114,9 +113,7 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         2. alpha * logp_a: 현재 정책이 얼마나 무작위적인지 (엔트로피)
         '''
 
-        qc1 = ac.qc1(o, a)
-        qc2 = ac.qc2(o, a)
-        qc = torch.min(qc1, qc2)
+        qc = ac.qc(o, a)
 
         lagrange_multiplier = lagrange_net(o).detach()
 
@@ -164,30 +161,23 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         loss_q2 = ((q2 - backup_q) ** 2).mean()
         loss_q = loss_q1 + loss_q2
 
-        qc1 = ac.qc1(o, a)
-        qc2 = ac.qc2(o, a)
+        qc = ac.qc(o, a)
 
         with torch.no_grad():
-            qc1_target = ac_targ.qc1(o2, a2)
-            qc2_target = ac_targ.qc2(o2, a2)
-            qc_target = torch.min(qc1_target, qc2_target)
+            qc_target = ac_targ.qc(o2, a2)
 
             backup_qc = c + gamma * (1 - d) * qc_target
 
         # MSE loss against Bellman backup
-        loss_qc1 = ((qc1 - backup_qc) ** 2).mean()
-        loss_qc2 = ((qc2 - backup_qc) ** 2).mean()
-        loss_qc = loss_qc1 + loss_qc2
+        loss_qc = ((qc - backup_qc) ** 2).mean()
 
         return loss_q, loss_qc
     
     def compute_loss_lagrange(data):
-        o, a, cost = data['obs'], data['act'], data['crew']
+        o, a = data['obs'], data['act']
         
         with torch.no_grad():
-            qc1 = ac.qc1(o, a)
-            qc2 = ac.qc2(o, a)
-            qc = torch.min(qc1, qc2)
+            qc = ac.qc(o, a)
 
         cost_dev = qc - cost_limit
 
@@ -198,7 +188,7 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
 
         return loss_lagrange
 
-    def update(data, lagrange_update=False):
+    def update(data, update_actor=True, update_lagrange=False):
         train_logger = {
             'alpha': [],
             'lagrange': [],
@@ -229,23 +219,34 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         # Freeze Q-networks for computational efficiency
         for p in q_params:
             p.requires_grad = False
-        for p in qc_params:
+        for p in ac.qc.parameters():
             p.requires_grad = False
 
         #=====================================================================#
         #  Update policy function and alpha                                   #
         #=====================================================================#
+        if update_actor:
+            loss_pi, loss_alpha = compute_loss_pi(data)
 
-        loss_pi, loss_alpha = compute_loss_pi(data)
+            pi_optimizer.zero_grad()
+            loss_pi.backward()
+            pi_optimizer.step()
 
-        pi_optimizer.zero_grad()
-        loss_pi.backward()
-        pi_optimizer.step()
+            if ac_kwargs['auto_alpha']:
+                alpha_optimizer.zero_grad()
+                loss_alpha.backward()
+                alpha_optimizer.step()
 
-        if ac_kwargs['auto_alpha']:
-            alpha_optimizer.zero_grad()
-            loss_alpha.backward()
-            alpha_optimizer.step()
+            #=====================================================================#
+            #  Update target networks                                             #
+            #=====================================================================#
+            with torch.no_grad():
+                for p, p_targ in zip(ac.parameters(), ac_targ.parameters()):
+                    p_targ.data.mul_(polyak)
+                    p_targ.data.add_((1 - polyak) * p.data)
+
+        else:
+            loss_pi, loss_alpha = torch.tensor(0.0), torch.tensor(0.0)
 
         train_logger['alpha'].append(ac.log_alpha.exp().item())
         train_logger['loss_pi'].append(loss_pi.item())
@@ -254,7 +255,7 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         #=====================================================================#
         #  Update Lagrange multiplier network                                 #
         #=====================================================================#
-        if lagrange_update:
+        if update_lagrange:
             loss_lagrange = compute_loss_lagrange(data)
 
             lagrange_optimizer.zero_grad()
@@ -269,16 +270,8 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         # Unfreeze Q-networks
         for p in q_params:
             p.requires_grad = True
-        for p in qc_params:
+        for p in ac.qc.parameters():
             p.requires_grad = True
-
-        #=====================================================================#
-        #  Update target networks                                             #
-        #=====================================================================#
-        with torch.no_grad():
-            for p, p_targ in zip(ac.parameters(), ac_targ.parameters()):
-                p_targ.data.mul_(polyak)
-                p_targ.data.add_((1 - polyak) * p.data)
 
         return train_logger
 
@@ -341,17 +334,19 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
 
     best_return, lowest_cost = -np.inf, np.inf
 
-    update_logger = defaultdict(list)
-
     if env_lib == "gymnasium":
         o, info = env.reset()
     elif env_lib == "safety_gymnasium":
         o, _ = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
+    update_count = 0
+
     print("🚀 Training on device: ", {next(ac.parameters()).device})
 
     for epoch in range(epochs):
+        update_logger = defaultdict(list)
+
         for t in range(steps_per_epoch):
             total_steps += 1
 
@@ -393,15 +388,18 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             #  Run RL update                                                      #
             #=====================================================================#
             
-            if total_steps >= update_after and total_steps % update_interval == 0:
+            if total_steps > start_steps:
                 for j in range(update_iters):
+                    update_count += 1
+
                     batch = buf.sample_batch(batch_size)
                     batch = {k: v.to(device) for k, v in batch.items()} 
 
-                    if epoch > warmup_epochs and j % lagrange_update_interval == 0:
-                        train_logger = update(batch, True)
-                    else:
-                        train_logger = update(batch, False)
+                    train_logger = update(
+                        batch,
+                        update_actor=(update_count % policy_delay == 0),
+                        update_lagrange=(epoch > warmup_epochs)
+                    )
 
                     for k, v in train_logger.items():
                         update_logger[k] += v
