@@ -246,8 +246,6 @@ def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
 
     best_return, lowest_cost = -np.inf, np.inf
 
-    update_logger = defaultdict(list)
-
     if env_lib == "gymnasium":
         o, info = env.reset()
     elif env_lib == "safety_gymnasium":
@@ -257,6 +255,8 @@ def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
     print("🚀 Training on device: ", {next(ac.parameters()).device})
     
     for epoch in range(epochs):
+        update_logger = defaultdict(list)
+        
         for t in range(steps_per_epoch):
             total_steps += 1
 
