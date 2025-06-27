@@ -9,7 +9,7 @@ device: "cpu"
 ac_kwargs:
   hid_dim: 256
   activation: "tanh"
-  auto_alpha: False
+  auto_alpha: true
   init_alpha: 0.00001
 
 lagrange_kwargs:
@@ -32,10 +32,10 @@ polyak: 0.995
 lagrange_init: 0.0
 cost_limit: 20.0
 
-pi_lr: 0.000005
-q_lr: 0.001
-alpha_lr: 0.001
-lagrange_lr: 0.0000005
+pi_lr: [0.00003, 0.000001]
+q_lr: [0.00008, 0.000001]
+alpha_lr: [0.00005, 0.000001]
+lagrange_lr: [0.00005, 0.000005]
 
 update_iters: 1
 policy_delay: 2
