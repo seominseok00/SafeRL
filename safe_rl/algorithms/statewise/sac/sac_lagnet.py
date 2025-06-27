@@ -18,10 +18,10 @@ from safe_rl.algorithms.vanilla.sac.buffer import Buffer
 
 from safe_rl.utils.config import load_config, get_device
 
-def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", env_id='SafetyPointGoal1-v0',
-            use_cost_indicator=True, seed=0, epochs=5000, steps_per_epoch=2000, max_ep_len=1000, replay_size=int(1e6), batch_size=256,
-            gamma=0.99, polyak=0.995, lagrange_network=MLPLagrangeMultiplier, lagrange_kwargs=dict(), lagrange_init=0.0, pi_lr=5e-6, q_lr=1e-3, alpha_lr=1e-3, lagrange_lr=5e-7, cost_limit=25,
-            start_steps=10000, warmup_epochs= 100, update_iters=1, policy_delay=2, num_test_episodes=1, device=None):
+def sac_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", env_id='SafetyPointGoal1-v0',
+            use_cost_indicator=True, seed=0, epochs=300, steps_per_epoch=4000, max_ep_len=1000, replay_size=int(1e6), batch_size=100,
+            gamma=0.99, polyak=0.995, lagrange_network=MLPLagrangeMultiplier, lagrange_kwargs=dict(), lagrange_init=0.0, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, lagrange_lr=1e-5, cost_limit=25,
+            start_steps=10000, warmup_epochs= 100, update_after=1000, update_interval=50, lagrange_update_interval=25, update_iters=50, num_test_episodes=10, device=None):
     
     device = get_device(device)
 
@@ -174,7 +174,7 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         return loss_q, loss_qc
     
     def compute_loss_lagrange(data):
-        o, a = data['obs'], data['act']
+        o, a, cost = data['obs'], data['act'], data['crew']
         
         with torch.no_grad():
             qc = ac.qc(o, a)
@@ -188,7 +188,7 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
 
         return loss_lagrange
 
-    def update(data, update_actor=True, update_lagrange=False):
+    def update(data, lagrange_update=False):
         train_logger = {
             'alpha': [],
             'lagrange': [],
@@ -225,28 +225,17 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         #=====================================================================#
         #  Update policy function and alpha                                   #
         #=====================================================================#
-        if update_actor:
-            loss_pi, loss_alpha = compute_loss_pi(data)
 
-            pi_optimizer.zero_grad()
-            loss_pi.backward()
-            pi_optimizer.step()
+        loss_pi, loss_alpha = compute_loss_pi(data)
 
-            if ac_kwargs['auto_alpha']:
-                alpha_optimizer.zero_grad()
-                loss_alpha.backward()
-                alpha_optimizer.step()
+        pi_optimizer.zero_grad()
+        loss_pi.backward()
+        pi_optimizer.step()
 
-            #=====================================================================#
-            #  Update target networks                                             #
-            #=====================================================================#
-            with torch.no_grad():
-                for p, p_targ in zip(ac.parameters(), ac_targ.parameters()):
-                    p_targ.data.mul_(polyak)
-                    p_targ.data.add_((1 - polyak) * p.data)
-
-        else:
-            loss_pi, loss_alpha = torch.tensor(0.0), torch.tensor(0.0)
+        if ac_kwargs['auto_alpha']:
+            alpha_optimizer.zero_grad()
+            loss_alpha.backward()
+            alpha_optimizer.step()
 
         train_logger['alpha'].append(ac.log_alpha.exp().item())
         train_logger['loss_pi'].append(loss_pi.item())
@@ -255,7 +244,7 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         #=====================================================================#
         #  Update Lagrange multiplier network                                 #
         #=====================================================================#
-        if update_lagrange:
+        if lagrange_update:
             loss_lagrange = compute_loss_lagrange(data)
 
             lagrange_optimizer.zero_grad()
@@ -272,6 +261,14 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             p.requires_grad = True
         for p in ac.qc.parameters():
             p.requires_grad = True
+
+        #=====================================================================#
+        #  Update target networks                                             #
+        #=====================================================================#
+        with torch.no_grad():
+            for p, p_targ in zip(ac.parameters(), ac_targ.parameters()):
+                p_targ.data.mul_(polyak)
+                p_targ.data.add_((1 - polyak) * p.data)
 
         return train_logger
 
@@ -340,8 +337,6 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
         o, _ = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
-    update_count = 0
-
     print("🚀 Training on device: ", {next(ac.parameters()).device})
 
     for epoch in range(epochs):
@@ -388,18 +383,15 @@ def sac_lag(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safe
             #  Run RL update                                                      #
             #=====================================================================#
             
-            if total_steps > start_steps:
+            if total_steps >= update_after and total_steps % update_interval == 0:
                 for j in range(update_iters):
-                    update_count += 1
-
                     batch = buf.sample_batch(batch_size)
                     batch = {k: v.to(device) for k, v in batch.items()} 
 
-                    train_logger = update(
-                        batch,
-                        update_actor=(update_count % policy_delay == 0),
-                        update_lagrange=(epoch > warmup_epochs)
-                    )
+                    if epoch > warmup_epochs and j % lagrange_update_interval == 0:
+                        train_logger = update(batch, True)
+                    else:
+                        train_logger = update(batch, False)
 
                     for k, v in train_logger.items():
                         update_logger[k] += v
@@ -462,4 +454,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config, original_config = load_config(args.config)
-    sac_lag(config=original_config, **config)
+    sac_lagnet(config=original_config, **config)

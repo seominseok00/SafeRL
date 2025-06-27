@@ -1,42 +1,44 @@
 env_lib: "safety_gymnasium"
 env_id: SafetyPointGoal1-v0  # safety_gymnasium
-use_cost_indicator: True
+use_cost_indicator: False
 device: "cpu"
 
 # env_lib: "gymnasium"
 # env_id: merge-v1  # highway_env
 
 ac_kwargs:
-  hid_dim: 256
+  hid_dim: 64
   activation: "tanh"
   auto_alpha: False
-  init_alpha: 0.00001
+  init_alpha: 0.0005
 
 lagrange_kwargs:
-  hid_dim: 256
+  hid_dim: 64
   activation: "tanh"
 
 seed: 0
-epochs: 5000
-steps_per_epoch: 2000
+epochs: 1000
+steps_per_epoch: 4000
 max_ep_len: 1000
 replay_size: 1000000
-batch_size: 256
+batch_size: 100
 
 start_steps: 10000
 warmup_epochs: 100
+update_after: 1000
+update_interval: 50
+lagrange_update_interval: 25
 
 gamma: 0.99
 polyak: 0.995
 
 lagrange_init: 0.0
-cost_limit: 20.0
+cost_limit: 0.0
 
-pi_lr: 0.000005
+pi_lr: 0.001
 q_lr: 0.001
 alpha_lr: 0.001
-lagrange_lr: 0.0000005
+lagrange_lr: 0.000001
 
-update_iters: 1
-policy_delay: 2
-num_test_episodes: 1
+update_iters: 25
+num_test_episodes: 10
