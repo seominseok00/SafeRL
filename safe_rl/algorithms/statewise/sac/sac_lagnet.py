@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 import torch
+import torch.nn.utils as torch_utils
 from torch.optim import Adam
 
 from safe_rl.algorithms.vanilla.sac.model import MLPActorCritic, MLPLagrangeMultiplier
@@ -226,11 +227,13 @@ def sac_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="s
 
         q_optimizer.zero_grad()
         loss_q.backward()
+        torch_utils.clip_grad_norm_(q_params, 10.0)
         q_optimizer.step()
         q_scheduler.step()
 
         qc_optimizer.zero_grad()
         loss_qc.backward()
+        torch_utils.clip_grad_norm_(ac.qc.parameters(), 10.0)
         qc_optimizer.step()
         qc_scheduler.step()
 
@@ -251,12 +254,14 @@ def sac_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="s
 
             pi_optimizer.zero_grad()
             loss_pi.backward()
+            torch_utils.clip_grad_norm_(ac.pi.parameters(), 10.0)  # Clip gradients of policy network
             pi_optimizer.step()
             pi_scheduler.step()
 
             if ac_kwargs['auto_alpha']:
                 alpha_optimizer.zero_grad()
                 loss_alpha.backward()
+                torch_utils.clip_grad_norm_(ac.log_alpha, 10.0)  # Clip gradients of log_alpha
                 alpha_optimizer.step()
                 alpha_scheduler.step()
 
@@ -283,6 +288,7 @@ def sac_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="s
 
             lagrange_optimizer.zero_grad()
             loss_lagrange.backward()
+            torch_utils.clip_grad_norm_(lagrange_net.parameters(), 3.0)  # Clip gradients of lagrange network
             lagrange_optimizer.step()
             lagrange_scheduler.step()
         else:
