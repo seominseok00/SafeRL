@@ -1,6 +1,6 @@
 env_lib: "safety_gymnasium"
 env_id: SafetyPointGoal1-v0  # safety_gymnasium
-use_cost_indicator: True
+use_cost_indicator: False
 device: "cpu"
 
 # env_lib: "gymnasium"
@@ -13,7 +13,7 @@ ac_kwargs:
   init_alpha: 0.00001
 
 seed: 0
-epochs: 5000
+epochs: 1500
 steps_per_epoch: 2000
 max_ep_len: 1000
 replay_size: 1000000

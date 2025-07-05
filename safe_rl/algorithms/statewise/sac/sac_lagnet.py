@@ -21,7 +21,7 @@ from safe_rl.utils.config import load_config, get_device
 from safe_rl.utils.schedulers import PolynomialDecayLR
 
 def sac_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", env_id='SafetyPointGoal1-v0',
-            use_cost_indicator=True, seed=0, epochs=5000, steps_per_epoch=2000, max_ep_len=1000, replay_size=int(1e6), batch_size=256,
+            use_cost_indicator=True, seed=0, epochs=1500, steps_per_epoch=2000, max_ep_len=1000, replay_size=int(1e6), batch_size=256,
             gamma=0.99, polyak=0.995, lagrange_network=MLPLagrangeMultiplier, lagrange_kwargs=dict(), lagrange_init=0.0, pi_lr=[3e-5, 1e-6], q_lr=[8e-5, 1e-6], alpha_lr=[5e-5, 5e-6], lagrange_lr=[5e-5, 1e-6], 
             cost_limit=25, start_steps=10000, warmup_epochs= 100, update_iters=1, policy_delay=2, num_test_episodes=1, device=None):
     
@@ -219,6 +219,12 @@ def sac_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="s
             'lagrange_lr': []
         }
 
+        # Unfreeze Q-networks
+        for p in q_params:
+            p.requires_grad = True
+        for p in ac.qc.parameters():
+            p.requires_grad = True
+
         #=====================================================================#
         #  Update q functions                                                 #
         #=====================================================================#
@@ -296,12 +302,6 @@ def sac_lagnet(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="s
 
         train_logger['lagrange'].append(lagrange_net(data['obs']).mean().item())
         train_logger['loss_lagrange'].append(loss_lagrange.item())
-
-        # Unfreeze Q-networks
-        for p in q_params:
-            p.requires_grad = True
-        for p in ac.qc.parameters():
-            p.requires_grad = True
 
         # Log current learning rates
         train_logger['pi_lr'].append(pi_scheduler.get_last_lr()[0])
