@@ -19,9 +19,8 @@ from safe_rl.algorithms.vanilla.sac.buffer import Buffer
 from safe_rl.utils.config import load_config, get_device
 
 def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", env_id='SafetyPointGoal1-v0',
-        use_cost_indicator=True, seed=0, epochs=300, steps_per_epoch=4000, max_ep_len=1000, replay_size=int(1e6), batch_size=100,
-        gamma=0.99, polyak=0.995, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, start_steps=10000, update_after=1000,
-        update_interval=50, update_iters=50, num_test_episodes=10, device=None):
+        use_cost_indicator=True, seed=0, epochs=1500, steps_per_epoch=2000, max_ep_len=1000, replay_size=int(1e6), batch_size=100,
+        gamma=0.99, polyak=0.995, pi_lr=1e-3, q_lr=1e-3, alpha_lr=1e-3, start_steps=10000, update_iters=1, policy_delay=2, num_test_episodes=10, device=None):
     
     device = get_device(device)
 
@@ -133,12 +132,17 @@ def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
 
         return loss_q
 
-    def update(data):
+    def update(data, update_actor=True):
         train_logger = {
+            'alpha': [],
             'loss_pi': [],
             'loss_q': [],
             'loss_alpha': []
         }
+
+        # Unfreeze Q-networks
+        for p in q_params:
+            p.requires_grad = True
 
         #=====================================================================#
         #  Update q function                                                  #
@@ -151,6 +155,10 @@ def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
         q_optimizer.step()
 
         train_logger['loss_q'].append(loss_q.item())
+        
+        if not update_actor:
+            return train_logger
+        
 
         # Freeze Q-networks for computational efficiency
         for p in q_params:
@@ -171,12 +179,9 @@ def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
             loss_alpha.backward()
             alpha_optimizer.step()
 
+        train_logger['alpha'].append(ac.log_alpha.exp().item())
         train_logger['loss_pi'].append(loss_pi.item())
         train_logger['loss_alpha'].append(loss_alpha.item())
-
-        # Unfreeze Q-networks
-        for p in q_params:
-            p.requires_grad = True
 
         #=====================================================================#
         #  Update target networks                                             #
@@ -185,7 +190,7 @@ def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
             for p, p_targ in zip(ac.parameters(), ac_targ.parameters()):
                 p_targ.data.mul_(polyak)
                 p_targ.data.add_((1 - polyak) * p.data)
-
+        
         return train_logger
 
     def get_action(o, deterministic=False):
@@ -252,6 +257,8 @@ def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
         o, _ = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
 
+    update_count = 0
+
     print("🚀 Training on device: ", {next(ac.parameters()).device})
     
     for epoch in range(epochs):
@@ -298,12 +305,14 @@ def sac(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_g
             #  Run RL update                                                      #
             #=====================================================================#
             
-            if total_steps >= update_after and total_steps % update_interval == 0:
+            if total_steps >= start_steps:
                 for j in range(update_iters):
+                    update_count += 1
+
                     batch = buf.sample_batch(batch_size)
                     batch = {k: v.to(device) for k, v in batch.items()} 
 
-                    train_logger = update(batch)
+                    train_logger = update(batch, update_actor=(update_count % policy_delay == 0))
 
                     update_logger['alpha'].append(ac.log_alpha.exp().item())
                     for k, v in train_logger.items():

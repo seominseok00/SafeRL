@@ -12,15 +12,13 @@ ac_kwargs:
   auto_alpha: True
 
 seed: 0
-epochs: 300
-steps_per_epoch: 4000
+epochs: 1500
+steps_per_epoch: 2000
 max_ep_len: 1000
 replay_size: 1000000
-batch_size: 100
+batch_size: 256
 
 start_steps: 10000
-update_after: 1000
-update_interval: 50
 
 gamma: 0.99
 polyak: 0.995
@@ -29,5 +27,6 @@ pi_lr: 0.001
 q_lr: 0.001
 alpha_lr: 0.001
 
-update_iters: 50
-num_test_episodes: 10
+update_iters: 1
+policy_delay: 2
+num_test_episodes: 1
