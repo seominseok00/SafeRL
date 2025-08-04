@@ -18,7 +18,7 @@ from safe_rl.utils.config import load_config, get_device
 
 def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib="safety_gymnasium", use_cost_indicator=True, 
                   env_id='SafetyPointGoal1-v0', seed=0, epochs=300, steps_per_epoch=30000, gamma=0.99, lamda=0.97, clip_ratio=0.2,
-                  target_kl=0.01, pi_lr=3e-4, vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, max_ep_len=1000, violate_reward=0 ,device=None):
+                  target_kl=0.01, pi_lr=3e-4, vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, max_ep_len=1000, penalty_weight=1 ,device=None):
     
     device = get_device(device)
 
@@ -157,7 +157,7 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
         o, info = env.reset()
     elif env_lib == "safety_gymnasium":
         o, _ = env.reset()
-    ep_ret, ep_ret_violate, ep_cret, ep_len = 0, 0, 0, 0
+    ep_ret, ep_cret, ep_len = 0, 0, 0
 
     print("🚀 Training on device: ", {next(ac.parameters()).device})
 
@@ -170,14 +170,9 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
                 c = info['cost']
             elif env_lib == "safety_gymnasium":
                 next_o, r, c, d, truncated, info = env.step(a)
-            
-            # Check cost: if cost > 0, treat as terminal with reward -100
-            cost_triggered = c > 0
-            if cost_triggered:
-                ep_ret_violate = ep_ret - violate_reward
-                d = True  # Force episode termination
 
-            ep_ret += r
+            # penalize cost with weight
+            ep_ret += r + penalty_weight * c
             ep_cret += c
             ep_len += 1
 
@@ -202,7 +197,6 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
                 
                 if terminal:
                     rollout_logger['EpRet'].append(ep_ret)
-                    rollout_logger['EpViolateRet'].append(ep_ret_violate)
                     rollout_logger['EpCost'].append(ep_cret)
                     rollout_logger['EpLen'].append(ep_len)
 
@@ -210,7 +204,7 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
                     o, info = env.reset()
                 elif env_lib == "safety_gymnasium":
                     o, _ = env.reset()
-                ep_ret, ep_ret_violate, ep_cret, ep_len = 0, 0, 0, 0
+                ep_ret, ep_cret, ep_len = 0, 0, 0
 
         #=====================================================================#
         #  Run RL update                                                      #
