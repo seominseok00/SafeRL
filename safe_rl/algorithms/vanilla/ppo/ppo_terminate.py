@@ -172,7 +172,7 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
                 next_o, r, c, d, truncated, info = env.step(a)
 
             # penalize cost with weight
-            ep_ret += r + penalty_weight * c
+            ep_ret += r - penalty_weight * c
             ep_cret += c
             ep_len += 1
 
