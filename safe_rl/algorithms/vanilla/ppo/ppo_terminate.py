@@ -146,7 +146,6 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
     
     rollout_logger = {
         'EpRet': deque(maxlen=episode_per_epoch),
-        'EpViolateRet': deque(maxlen=episode_per_epoch),
         'EpCost': deque(maxlen=episode_per_epoch),
         'EpLen': deque(maxlen=episode_per_epoch),
     }
@@ -219,7 +218,6 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
         epoch_logger.append({
             'epoch': epoch,
             'EpRet': np.mean(rollout_logger['EpRet']),
-            'EpViolateRet': np.mean(rollout_logger['EpViolateRet']),
             'EpCost': np.mean(rollout_logger['EpCost']),
             'EpLen': np.mean(rollout_logger['EpLen']),
             'loss_pi': np.mean(train_logger['loss_pi']),
