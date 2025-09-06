@@ -1,6 +1,6 @@
 import numpy as np
 
-from gymnasium.spaces import Box, Discrete
+from gym.spaces import Box, Discrete
 
 import torch
 import torch.nn as nn

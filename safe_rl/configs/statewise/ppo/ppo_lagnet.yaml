@@ -1,10 +1,15 @@
-env_lib: "safety_gymnasium"
-env_id: SafetyPointGoal1-v0  # safety_gymnasium
+env_lib: "safety_gym"
+env_id: Safexp-PointGoal1-v0
 use_cost_indicator: False
 device: "cpu"
 
+# env_lib: "safety_gymnasium"
+# env_id: SafetyPointGoal1-v0
+# use_cost_indicator: False
+# device: "cpu"
+
 # env_lib: "gymnasium"
-# env_id: merge-v1  # highway_env
+# env_id: merge-v1
 
 ac_kwargs:
   hid_dim: 64

@@ -33,6 +33,13 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
         
         env = gymnasium.make(env_id)
 
+    elif env_lib == "safety_gym":
+        import gym
+        import safety_gym
+
+        env = gym.make(env_id)
+        env.constrain_indicator = use_cost_indicator
+
     elif env_lib == "safety_gymnasium":
         import safety_gymnasium
 
@@ -154,6 +161,8 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
     
     if env_lib == "gymnasium":
         o, info = env.reset()
+    elif env_lib == "safety_gym":
+        o = env.reset()
     elif env_lib == "safety_gymnasium":
         o, _ = env.reset()
     ep_ret, ep_cret, ep_len = 0, 0, 0
@@ -167,6 +176,9 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
             if env_lib == "gymnasium":
                 next_o, r, d, truncated, info = env.step(a)
                 c = info['cost']
+            elif env_lib == "safety_gym":
+                next_o, r, d, info = env.step(a)
+                c = info.get('cost', 0)
             elif env_lib == "safety_gymnasium":
                 next_o, r, c, d, truncated, info = env.step(a)
 
@@ -201,6 +213,8 @@ def ppo_terminate(config, actor_critic=MLPActorCritic, ac_kwargs=dict(), env_lib
 
                 if env_lib == "gymnasium":
                     o, info = env.reset()
+                elif env_lib == "safety_gym":
+                    o = env.reset()
                 elif env_lib == "safety_gymnasium":
                     o, _ = env.reset()
                 ep_ret, ep_cret, ep_len = 0, 0, 0
