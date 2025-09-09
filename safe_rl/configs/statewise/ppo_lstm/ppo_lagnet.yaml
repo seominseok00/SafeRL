@@ -1,0 +1,35 @@
+# env_lib: "safety_gym"
+# env_id: Safexp-PointGoal1-v0
+# use_cost_indicator: False
+# device: "cpu"
+
+env_lib: "safety_gymnasium"
+env_id: SafetyPointGoal1-v0
+use_cost_indicator: False
+device: "cpu"
+
+# env_lib: "gymnasium"
+# env_id: merge-v1
+
+ac_kwargs:
+  hid_dim: 128
+  activation: "tanh"
+  
+seed: 0
+epochs: 1000
+steps_per_epoch: 15000
+max_ep_len: 1000
+
+gamma: 0.99
+lamda: 0.97
+clip_ratio: 0.2
+target_kl: 0.01
+
+lagrange_init: 0.0
+cost_limit: 0
+
+ac_lr: 0.0003
+lagrange_lr: 0.00001
+
+train_ac_iters: 80
+train_lagrange_iters: 1
